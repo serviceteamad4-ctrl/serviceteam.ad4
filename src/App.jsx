@@ -1,18 +1,14 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Swal from 'sweetalert2';
+import { jsPDF } from 'jspdf';
 import Dashboard from './Dashboard.jsx';
 import RequestDetail from './RequestDetail.jsx';
 import FilterPanel from './FilterPanel.jsx';
+import EditableDropdown from './EditableDropdown.jsx';
+import { getStoredDropdownData, addDropdownValue, removeDropdownValue } from './excelDataManager.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4001';
 const STORAGE_KEY = 'service-desk-requests-v1';
-const seed = [
-  { id: '1', customer: 'BMN', ref: 'BMN-001', source: 'ไลน์', receivedAt: '2026-08-27T16:47', ticket: 'BMN000001', location: 'Sukhumvit Corner', contact: 'คุณไจ๋', phone: '', description: 'สื่อลูกค้าเป็นสีขาว ส่วนผลแสดงจอภาพเป็นอมฟ้า', jobType: 'แก้ไขหน้างาน', status: 'รอลูกค้าสรุปงาน', assignee: 'เอ็กซ์', appointment: '', completedAt: '2026-08-27T16:47', action: '', notes: 'รอคอนเฟิร์มกับยูนิลูมีน' },
-  { id: '2', customer: 'โรงพยาบาลมิตรภาพ', ref: 'RHM-002', source: 'ไลน์', receivedAt: '2026-08-26T09:46', ticket: 'RHM000002', location: 'โรงพยาบาลมิตรภาพ สระบุรี', contact: 'Magazine', phone: '', description: 'งาน รพ.มิตรภาพ จอ Kiosk มีปัญหาการเล่นสื่อ', jobType: 'รีโมท', status: 'รอลูกค้าสรุปงาน', assignee: 'หนูเล็ก', appointment: '', completedAt: '2026-08-26T16:15', action: '', notes: '' },
-  { id: '3', customer: 'Workoplus', ref: 'WOR-003', source: 'ไลน์', receivedAt: '2026-08-24T15:04', ticket: 'WOR000003', location: 'Levis Siam Paragon', contact: 'Siam Paragon', phone: '', description: 'ขอใบเสนอราคาและขอคิวเข้าแก้ไขจอ LED ที่ร้าน ลีวายส์ สาขา สยามพารากอนค่ะ', jobType: 'แก้ไขหน้างาน', status: 'รอลูกค้าสรุปงาน', assignee: '', appointment: '', completedAt: '2026-08-24T15:04', action: '', notes: 'รอตรวจสอบ ขอราคา' },
-  { id: '4', customer: 'Besides Umi', ref: 'BSU-004', source: 'ไลน์', receivedAt: '2026-08-13T16:50', ticket: 'BSU000004', location: 'Besides Umi', contact: 'Shin', phone: '', description: 'จอเปิดไม่ติดจากอาการ ลมพัดจอล้ม ส่งทีมเข้าประเมินซ่อม', jobType: 'แก้ไขหน้างาน', status: 'รอลูกค้าสรุปงาน', assignee: 'มาร์ค , เอ็ม', appointment: '2026-08-19T13:00', completedAt: '2026-08-19T16:00', action: 'เข้าตรวจสอบอาการจอเสียหาย เนื่องจากจอโดนลมพัดล้ม ขนาด Kiosk 43 นิ้ว จำนวน 1 จอ', notes: 'รอเสนอราคา' },
-  { id: '5', customer: 'GQ', ref: 'GQ-005', source: 'ไลน์', receivedAt: '2026-07-09T16:02', ticket: 'GQ000005', location: 'Mega bangna', contact: '', phone: '', description: 'เมกะบางนาจอหน้าร้านมุมบนขวามือลูกค้าแจ้งมีเสียไป 1 จุด', jobType: 'แก้ไขหน้างาน', status: 'รอลูกค้าสรุปงาน', assignee: '', appointment: '2026-07-18T18:00', completedAt: '2026-07-19T04:00', action: '', notes: '' },
-  { id: '6', customer: 'บริษัท ดี.อาร์.แอดเวอร์ไทซิ่ง จำกัด', ref: 'DRA-006', source: 'ไลน์', receivedAt: '2026-07-06T10:58', ticket: 'DRA000006', location: 'True Shop Central Plaza Westgate', contact: '', phone: '', description: 'กล่อง restart เอง พบว่ากล่องเล่นสื่อ H.265 ไม่ได้', jobType: 'รีโมท', status: 'กำลังดำเนินการ', assignee: 'หนูเล็ก , XIE SHAOYANG', appointment: '', completedAt: '', action: 'อยู่ระหว่างประสานงานตรวจสอบกับซัพ', notes: 'ตรวจสอบโปรแกรม' },
-];
 
 const emptyRequest = {
   ref: '',
@@ -27,7 +23,7 @@ const emptyRequest = {
   description: '',
   image: '',
   ma: 'N',
-  jobType: 'แก้ไขหน้างาน',
+  jobType: 'แนะนำ',
   status: 'รับเรื่อง',
   assignee: '',
   appointment: '',
@@ -42,7 +38,15 @@ const emptyRequest = {
   file: '',
 };
 
-const formatDate = (value) => value ? new Intl.DateTimeFormat('th-TH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '-';
+const formatDate = (value) => value ? new Intl.DateTimeFormat('th-TH-u-ca-gregory', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }).format(new Date(value)) : '-';
+
+const monthKeyFromValue = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  const year = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric' }).format(date);
+  const month = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', month: '2-digit' }).format(date);
+  return `${year}-${month}`;
+};
 
 const normalizeRequest = (item = {}) => {
   const nextItem = { ...emptyRequest, ...item };
@@ -57,17 +61,9 @@ const readRequests = async () => {
       throw new Error('Failed to fetch requests');
     }
     const data = await response.json();
-    return Array.isArray(data) ? data.map(normalizeRequest) : seed.map(normalizeRequest);
+    return Array.isArray(data) ? data.map(normalizeRequest) : [];
   } catch {
-    try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-      if (Array.isArray(stored) && stored.length) {
-        return stored.map(normalizeRequest);
-      }
-    } catch {
-      // ignore invalid localStorage data
-    }
-    return seed.map(normalizeRequest);
+    return [];
   }
 };
 
@@ -88,32 +84,167 @@ const generateTrackingNumber = (customer, existingRequests = []) => {
   return `${prefix}${String(next).padStart(6, '0')}`;
 };
 
-const printPdf = (title) => {
-  const printWindow = window.open('', '_blank', 'width=1200,height=850');
-  if (!printWindow) {
-    window.print();
+const pdfDetailFields = [
+  ['customer', 'ลูกค้า'], ['ref', 'Ref.'], ['source', 'แหล่งที่มา'],
+  ['receivedAt', 'วันเวลาที่รับแจ้ง'], ['ticket', 'เลขที่ติดตามงาน'], ['location', 'สถานที่/สาขา'],
+  ['site', 'สถานที่ตั้ง'], ['contact', 'ผู้ติดต่อ'], ['phone', 'เบอร์ติดต่อ'], ['description', 'ข้อมูลการรับแจ้ง'],
+  ['image', 'รูปภาพที่แจ้ง'], ['ma', 'MA'], ['jobType', 'ลักษณะงาน'], ['status', 'สถานะงาน'],
+  ['assignee', 'ผู้ดำเนินการ'], ['appointment', 'วันนัดหมาย เวลาเริ่มต้น'], ['appointmentEnd', 'วันนัดหมาย เวลาสิ้นสุด'],
+  ['action', 'รายละเอียดการดำเนินการ'], ['result', 'ผลการดำเนินการ'], ['equipment', 'เกี่ยวกับอุปกรณ์'],
+  ['completedImage', 'รูปภาพที่ดำเนินการเสร็จแล้ว'], ['completedAt', 'วันเวลาเสร็จ'], ['map', 'MAP'],
+  ['vehicle', 'ทะเบียนรถ'], ['notes', 'หมายเหตุ'], ['file', 'ไฟล์'],
+];
+
+const pdfValue = (key, value) => ['receivedAt', 'appointment', 'appointmentEnd', 'completedAt'].includes(key)
+  ? new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+  : String(value);
+
+const printPdf = async (title, exportItems = []) => {
+  if (!exportItems.length) {
+    await Swal.fire({
+      icon: 'info',
+      title: 'ไม่มีข้อมูลสำหรับส่งออก',
+      text: 'ไม่พบรายการตามเงื่อนไขที่เลือก',
+      confirmButtonText: 'ปิด',
+      confirmButtonColor: '#5b5ce2',
+    });
     return;
   }
 
-  const styles = [...document.querySelectorAll('style, link[rel="stylesheet"]')]
-    .map((node) => node.outerHTML)
-    .join('');
+  try {
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const pageWidth = 210;
+    const pageHeight = 297;
 
-  const content = document.querySelector('.active-view')?.innerHTML || '';
-  printWindow.document.write(`<!doctype html><html lang="th"><head><meta charset="UTF-8"><title>${title}</title>${styles}<style>body{background:#fff;padding:20px}.sidebar,.topbar,.toolbar,.page-heading .primary-btn,.daily-actions button{display:none!important}.view{display:block!important;padding:0}.report-card{box-shadow:none}</style></head><body>${content}</body></html>`);
-  printWindow.document.close();
-  printWindow.focus();
-  printWindow.onload = () => {
-    printWindow.print();
-    printWindow.onafterprint = () => printWindow.close();
-  };
+    for (let itemIndex = 0; itemIndex < exportItems.length; itemIndex++) {
+      const item = exportItems[itemIndex];
+      if (itemIndex > 0) pdf.addPage();
+      const canvas = document.createElement('canvas');
+      canvas.width = 1240;
+      canvas.height = 1754;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('ไม่สามารถสร้างพื้นที่วาด PDF ได้');
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#f6f7ff';
+      context.roundRect(55, 45, 1130, 120, 24);
+      context.fill();
+      context.fillStyle = '#172033';
+      context.font = '700 34px Arial, sans-serif';
+      context.fillText(title, 82, 92);
+      context.fillStyle = '#667085';
+      context.font = '18px Arial, sans-serif';
+      context.fillText(`รายการ ${itemIndex + 1} / ${exportItems.length}`, 82, 133);
+      context.strokeStyle = '#dfe3ee';
+      context.lineWidth = 2;
+      context.roundRect(55, 195, 1130, 1500, 24);
+      context.stroke();
+      context.fillStyle = '#172033';
+      context.font = '700 25px Arial, sans-serif';
+      context.fillText(`${item.status || '-'}   ${item.ref || ''}`, 88, 252);
+      let y = 305;
+      const drawWrapped = (text, x, maxWidth) => {
+        const words = String(text || '-').split('');
+        let line = '';
+        const lines = [];
+        words.forEach((char) => {
+          const next = line + char;
+          if (context.measureText(next).width > maxWidth && line) {
+            lines.push(line);
+            line = char;
+          } else line = next;
+        });
+        if (line) lines.push(line);
+        lines.forEach((lineText) => {
+          context.fillText(lineText, x, y);
+          y += 27;
+        });
+      };
+
+      // Draw fields with special handling for images
+      pdfDetailFields.forEach(([key, label]) => {
+        if (!item[key]) return;
+        if (['image', 'completedImage'].includes(key)) return; // Skip images for now, handle separately
+        context.fillStyle = '#778196';
+        context.font = '17px Arial, sans-serif';
+        context.fillText(label, 88, y);
+        y += 25;
+        context.fillStyle = '#172033';
+        context.font = '20px Arial, sans-serif';
+        drawWrapped(pdfValue(key, item[key]), 88, 1060);
+        y += 14;
+      });
+
+      // Load and add images if they exist
+      const loadImage = (src) => new Promise((resolve) => {
+        const img = new Image();
+        img.src = src;
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.crossOrigin = 'anonymous';
+      });
+
+      if (item.image || item.completedImage) {
+        y += 20;
+        if (item.image) {
+          context.fillStyle = '#778196';
+          context.font = '17px Arial, sans-serif';
+          context.fillText('รูปภาพที่แจ้ง', 88, y);
+          y += 25;
+          try {
+            const img = await loadImage(item.image);
+            if (img) {
+              const imgWidth = 300;
+              const imgHeight = (img.height / img.width) * imgWidth;
+              context.drawImage(img, 88, y, imgWidth, imgHeight);
+              y += imgHeight + 20;
+            }
+          } catch (e) {
+            console.error('Error loading image:', e);
+          }
+        }
+        if (item.completedImage) {
+          context.fillStyle = '#778196';
+          context.font = '17px Arial, sans-serif';
+          context.fillText('รูปภาพที่ดำเนินการเสร็จแล้ว', 88, y);
+          y += 25;
+          try {
+            const img = await loadImage(item.completedImage);
+            if (img) {
+              const imgWidth = 300;
+              const imgHeight = (img.height / img.width) * imgWidth;
+              context.drawImage(img, 88, y, imgWidth, imgHeight);
+              y += imgHeight + 20;
+            }
+          } catch (e) {
+            console.error('Error loading image:', e);
+          }
+        }
+      }
+
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.94), 'JPEG', 0, 0, pageWidth, pageHeight);
+    }
+    pdf.save(`${title.replace(/[\\/:*?"<>|]/g, '-').trim()}.pdf`);
+  } catch (error) {
+    await Swal.fire({
+      icon: 'error',
+      title: 'ส่งออก PDF ไม่สำเร็จ',
+      text: error instanceof Error ? error.message : 'ไม่สามารถสร้างไฟล์ PDF ได้',
+      confirmButtonText: 'ปิด',
+      confirmButtonColor: '#5b5ce2',
+    });
+  }
 };
 
 function App() {
-  const [requests, setRequests] = useState(seed.map(normalizeRequest));
+  const [requests, setRequests] = useState([]);
   const [view, setView] = useState('requests');
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [status, setStatus] = useState('ทั้งหมด');
+  const [selectedMonth, setSelectedMonth] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit' }).format(new Date()));
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [filterOpen, setFilterOpen] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState({});
   const [editing, setEditing] = useState(null);
@@ -138,18 +269,55 @@ function App() {
     loadRequests();
   }, []);
 
-  const filtered = useMemo(() => requests
-    .filter((item) => {
-      const haystack = Object.values(item).join(' ').toLowerCase();
-      const matchesAdvanced = Object.entries(advancedFilters).every(([key, value]) => {
-        const selectedValues = Array.isArray(value) ? value : value ? [value] : [];
-        return !selectedValues.length || selectedValues.includes(String(item[key] || ''));
-      });
-      return (!query || haystack.includes(query.toLowerCase()))
-        && (status === 'ทั้งหมด' || item.status === status)
-        && matchesAdvanced;
-    })
-    .sort((a, b) => new Date(b.receivedAt) - new Date(a.receivedAt)), [requests, query, status, advancedFilters]);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const filtered = useMemo(() => {
+    const q = debouncedQuery.trim().toLowerCase();
+    const advancedEntries = Object.entries(advancedFilters).filter(([, value]) => (Array.isArray(value) ? value.length : value));
+    return requests
+      .filter((item) => {
+        if (q) {
+          const haystack = [
+            item.customer,
+            item.ticket,
+            item.location,
+            item.description,
+            item.status,
+            item.assignee,
+            item.ref,
+          ].join(' ').toLowerCase();
+          if (!haystack.includes(q)) return false;
+        }
+        if (status !== 'ทั้งหมด' && item.status !== status) return false;
+        if (selectedMonth && item.receivedAt && monthKeyFromValue(item.receivedAt) !== selectedMonth) return false;
+        for (const [key, value] of advancedEntries) {
+          const selectedValues = Array.isArray(value) ? value : [value];
+          if (!selectedValues.includes(String(item[key] || ''))) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => (b.receivedAt ? Date.parse(b.receivedAt) : 0) - (a.receivedAt ? Date.parse(a.receivedAt) : 0));
+  }, [requests, debouncedQuery, status, advancedFilters, selectedMonth]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery, status, selectedMonth, advancedFilters]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const paginatedFiltered = useMemo(
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page, pageSize],
+  );
 
   const persist = async (requestItem) => {
     const normalized = normalizeRequest(requestItem);
@@ -165,7 +333,8 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error('API save failed');
+        const details = await response.json().catch(() => null);
+        throw new Error(details?.message || 'API save failed');
       }
 
       const saved = normalizeRequest(await response.json());
@@ -176,13 +345,8 @@ function App() {
       setRequests(updated);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       return updated;
-    } catch {
-      const fallback = isUpdate
-        ? requests.map((item) => item.id === normalized.id ? normalized : item)
-        : [...requests, { ...normalized, id: normalized.id || crypto.randomUUID() }];
-      setRequests(fallback);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(fallback));
-      return fallback;
+    } catch (error) {
+      throw error;
     }
   };
 
@@ -197,19 +361,44 @@ function App() {
     const nextTicket = normalized.ticket && normalized.ticket.trim() ? normalized.ticket.trim() : generateTrackingNumber(normalized.customer, requests);
     normalized.ticket = nextTicket;
 
-    const saved = await persist(normalized);
-    if (saved) {
+    try {
+      const saved = await persist(normalized);
       setRequests(saved);
+      setEditing(null);
+      await Swal.fire({
+        icon: 'success',
+        title: isExisting ? 'บันทึกการแก้ไขแล้ว' : 'เพิ่มงานใหม่แล้ว',
+        text: `เลขติดตาม ${normalized.ticket}`,
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#ef765e',
+        timer: 2200,
+        timerProgressBar: true,
+      });
+    } catch (error) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'บันทึกไม่สำเร็จ',
+        text: error instanceof Error ? error.message : 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้',
+        confirmButtonText: 'ปิด',
+        confirmButtonColor: '#ef765e',
+      });
     }
-    setEditing(null);
-    setToast(isExisting ? 'อัปเดตงานแล้ว' : 'เพิ่มงานใหม่แล้ว');
-    setTimeout(() => setToast(''), 2200);
   };
 
   const handleDeleteRequest = async (requestId) => {
     if (!requestId) return;
-    const confirmed = window.confirm('ลบงานนี้ออกจากระบบใช่หรือไม่?');
-    if (!confirmed) return;
+    const confirmation = await Swal.fire({
+      icon: 'warning',
+      title: 'ยืนยันการลบงาน',
+      text: 'ข้อมูลนี้จะถูกลบออกจากระบบและไม่สามารถกู้คืนได้',
+      showCancelButton: true,
+      confirmButtonText: 'ลบงาน',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#dc5b56',
+      cancelButtonColor: '#8b9aa1',
+      reverseButtons: true,
+    });
+    if (!confirmation.isConfirmed) return;
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/requests/${requestId}`, { method: 'DELETE' });
@@ -222,12 +411,23 @@ function App() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       setSelectedRequest(null);
       setEditing(null);
-      setToast('ลบงานแล้ว');
-      setTimeout(() => setToast(''), 2200);
+      await Swal.fire({
+        icon: 'success',
+        title: 'ลบงานแล้ว',
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#ef765e',
+        timer: 1800,
+        timerProgressBar: true,
+      });
     } catch {
       setError('ลบงานไม่สำเร็จ');
-      setToast('ลบงานไม่สำเร็จ');
-      setTimeout(() => setToast(''), 2200);
+      await Swal.fire({
+        icon: 'error',
+        title: 'ลบงานไม่สำเร็จ',
+        text: 'กรุณาตรวจสอบการเชื่อมต่อเซิร์ฟเวอร์แล้วลองใหม่',
+        confirmButtonText: 'ปิด',
+        confirmButtonColor: '#ef765e',
+      });
     }
   };
 
@@ -251,8 +451,8 @@ function App() {
         <div className="brand">
           <span className="brand-mark">SD</span>
           <div>
-            <strong>Service Desk</strong>
-            <small>ระบบงานบริการของคุณ</small>
+            <strong>Service Desk </strong>
+            <small></small>
           </div>
         </div>
         <nav className="side-nav">
@@ -260,14 +460,14 @@ function App() {
             <span>▦</span> งานแจ้งบริการ
           </button>
           <button className={`nav-item ${view === 'reports' ? 'active' : ''}`} onClick={() => setView('reports')}>
-            <span>◒</span> รายงานและสถิติ
+            <span>◒</span> รายงานและสถิติ ประจำวัน
           </button>
         </nav>
         <div className="side-foot">
           <div className="status-dot" />
           <div>
-            <strong>ฐานข้อมูลในเครื่อง</strong>
-            <small>ข้อมูลของคุณควบคุมเอง</small>
+            <strong></strong>
+            <small></small>
           </div>
         </div>
       </aside>
@@ -285,7 +485,14 @@ function App() {
         </header>
 
         {view === 'requests' ? (
-          selectedRequest ? (
+          editing ? (
+            <RequestEditor
+              request={editing}
+              requests={requests}
+              onClose={() => setEditing(null)}
+              onSave={saveRequest}
+            />
+          ) : selectedRequest ? (
             <RequestDetail
               request={selectedRequest}
               onBack={() => setSelectedRequest(null)}
@@ -296,25 +503,32 @@ function App() {
             <RequestsView
               requests={requests}
               filtered={filtered}
+              pageItems={paginatedFiltered}
               query={query}
               setQuery={setQuery}
               status={status}
               setStatus={setStatus}
+              selectedMonth={selectedMonth}
+              setSelectedMonth={setSelectedMonth}
+              page={page}
+              setPage={setPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              setPageSize={setPageSize}
               filterOpen={filterOpen}
               setFilterOpen={setFilterOpen}
               advancedFilters={advancedFilters}
               setAdvancedFilters={setAdvancedFilters}
               onAdd={() => setEditing({ ...emptyRequest })}
-              onEdit={setSelectedRequest}
-              onDelete={handleDeleteRequest}
+              onEdit={(request) => setEditing(request)}
               onExport={exportCsv}
-              onExportPdf={() => printPdf('Service Desk - รายการที่กรอง')}
+              onExportPdf={() => printPdf('Service Desk - รายการที่กรอง', filtered)}
               isLoading={isLoading}
               error={error}
             />
           )
         ) : (
-          <Dashboard requests={requests} onExport={() => printPdf('Service Desk - Dashboard รายวัน')} />
+          <Dashboard requests={requests} onExport={() => printPdf('Service Desk - Dashboard รายวัน', requests)} />
         )}
       </main>
 
@@ -327,216 +541,303 @@ function App() {
         />
       )}
 
-      {editing && <RequestModal request={editing} requests={requests} onClose={() => setEditing(null)} onSave={saveRequest} />}
       {toast && <div className="toast show">{toast}</div>}
     </div>
   );
 }
 
-function RequestsView({ requests, filtered, query, setQuery, status, setStatus, setFilterOpen, onAdd, onEdit, onDelete, onExport, onExportPdf, isLoading, error }) {
-  const active = requests.filter((r) => r.status !== 'เสร็จสิ้น').length;
-  const done = requests.filter((r) => r.status === 'เสร็จสิ้น').length;
+function RequestsView({ requests, filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, onAdd, onEdit, onExport, onExportPdf, isLoading, error }) {
+  const monthInputRef = useRef(null);
+  const selectedMonthRequests = useMemo(
+    () => requests.filter((r) => !selectedMonth || !r.receivedAt || monthKeyFromValue(r.receivedAt) === selectedMonth),
+    [requests, selectedMonth],
+  );
+  const active = useMemo(() => selectedMonthRequests.filter((r) => r.status !== 'เรียบร้อยปกติ').length, [selectedMonthRequests]);
+  const done = selectedMonthRequests.length - active;
+  const statusOrder = ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'เรียบร้อยปกติ', 'รอเสนอราคา'];
+  const groupedStatuses = useMemo(() => (status === 'ทั้งหมด' ? statusOrder : [status])
+    .map((groupStatus) => ({
+      status: groupStatus,
+      items: pageItems.filter((request) => request.status === groupStatus),
+    }))
+    .filter((group) => group.items.length > 0), [pageItems, status]);
 
   return (
-    <section className="view active-view">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">OPERATIONS / 2026</p>
-          <h1>งานแจ้งบริการ</h1>
-          <p className="subheading">ติดตามงานตั้งแต่รับแจ้งจนปิดงานในที่เดียว</p>
-        </div>
-        <button className="primary-btn" onClick={onAdd}><span>+</span> เพิ่มงานใหม่</button>
+    <section className="view active-view" style={{ paddingTop: '16px' }}>
+      <div className="page-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+        <button className="primary-btn ui-button" onClick={onAdd}><span>+</span> เพิ่มงานใหม่</button>
       </div>
 
-      <div className="metric-row">
-        <Metric label="งานทั้งหมด" value={requests.length} />
-        <Metric label="งานที่ยังเปิดอยู่" value={active} className="accent" />
-        <Metric label="ปิดงานแล้ว" value={done} />
+      <div className="metric-row ui-card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(180px, 1fr))', gap: '14px', marginBottom: '14px' }}>
+        <Metric label="งานทั้งหมดในหน้านี้" value={selectedMonthRequests.length} style={{ boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', borderRadius: '18px', padding: '14px 16px', minHeight: '112px' }} />
+        <Metric label="งานที่ยังเปิดอยู่ในหน้านี้" value={active} className="accent" style={{ boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', borderRadius: '18px', padding: '14px 16px', minHeight: '112px' }} />
+        <Metric label="งานที่เสร็จแล้วในหน้านี้" value={done} style={{ boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', borderRadius: '18px', padding: '14px 16px', minHeight: '112px' }} />
       </div>
 
-      <div className="toolbar">
-        <label className="search-box">
-          <span>⌕</span>
-          <input type="search" placeholder="ค้นหาลูกค้า เลขติดตาม สถานที่..." value={query} onChange={(event) => setQuery(event.target.value)} />
+      <div className="toolbar ui-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <label className="search-box" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 0', minWidth: '0', width: '100%', height: '42px', border: '1px solid #dfe6e4', borderRadius: '14px', background: '#fff', padding: '0 10px 0 8px', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>
+          <button type="button" className="field-icon month-picker-button" aria-label="เลือกเดือน" onClick={() => {
+            const input = monthInputRef.current;
+            if (!input) return;
+            if (typeof input.showPicker === 'function') input.showPicker();
+            else input.focus();
+          }} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', border: '1px solid #dfe6e4', borderRadius: '8px', background: '#f7faf9', color: '#6f7f7d', fontSize: '14px', flexShrink: 0, lineHeight: 1, padding: 0, cursor: 'pointer' }}>📆</button>
+          <input ref={monthInputRef} type="month" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', minWidth: 0, flex: '1', font: 'inherit', color: '#18242b', padding: 0, margin: 0, cursor: 'pointer' }} />
         </label>
-        <select value={status} onChange={(event) => setStatus(event.target.value)}>
+        <label className="search-box" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 0', minWidth: '0', width: '100%', height: '42px', border: '1px solid #dfe6e4', borderRadius: '14px', background: '#fff', padding: '0 10px 0 8px', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>
+          <span className="field-icon" aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', border: '1px solid #dfe6e4', borderRadius: '8px', background: '#f7faf9', color: '#6f7f7d', fontSize: '14px', flexShrink: 0, lineHeight: 1 }}>⌕</span>
+          <input type="search" placeholder="ค้นหาลูกค้า เลขติดตาม สถานที่..." value={query} onChange={(event) => setQuery(event.target.value)} style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', flex: '1', font: 'inherit', color: '#18242b', padding: 0, margin: 0 }} />
+        </label>
+        <select value={status} onChange={(event) => setStatus(event.target.value)} style={{ minWidth: '170px', flex: '0 0 170px', height: '42px', borderRadius: '14px', border: '1px solid #dfe6e4', padding: '0 12px', background: '#fff', color: '#18242b', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>
           <option>ทั้งหมด</option>
+          <option>งานที่ยังเปิดอยู่</option>
           <option>รอดำเนินการ</option>
           <option>กำลังดำเนินการ</option>
           <option>รอลูกค้าสรุปงาน</option>
-          <option>เสร็จสิ้น</option>
+          <option>เรียบร้อยปกติ</option>
           <option>รอเสนอราคา</option>
         </select>
-        <button className="secondary-btn" onClick={() => setFilterOpen(true)}>☷ ตัวกรอง</button>
-        <button className="secondary-btn" onClick={onExport}>ดาวน์โหลด CSV</button>
-        <button className="secondary-btn" onClick={onExportPdf}>ส่งออก PDF</button>
+        <button className="secondary-btn ui-button" onClick={() => setFilterOpen(true)} style={{ borderRadius: '12px', height: '42px', padding: '0 14px', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>☷ ตัวกรอง</button>
+        <button className="secondary-btn" onClick={onExport} style={{ borderRadius: '12px', height: '42px', padding: '0 14px', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>ดาวน์โหลด CSV</button>
+        <button className="secondary-btn" onClick={onExportPdf} style={{ borderRadius: '12px', height: '42px', padding: '0 14px', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>ส่งออก PDF</button>
       </div>
 
       {isLoading && <div className="empty-state">กำลังโหลดข้อมูล...</div>}
       {!isLoading && error && <div className="empty-state error">{error}</div>}
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>ลูกค้า</th>
-              <th>Ref.</th>
-              <th>เลขติดตาม</th>
-              <th>สถานที่ / สาขา</th>
-              <th>รายละเอียด</th>
-              <th>สถานะ</th>
-              <th>ผู้ดำเนินการ</th>
-              <th>วันที่รับแจ้ง</th>
-              <th>จัดการ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((request) => (
-              <tr key={request.id}>
-                <td onClick={() => onEdit(request)}>{request.customer}</td>
-                <td onClick={() => onEdit(request)}>{request.ref || '-'}</td>
-                <td onClick={() => onEdit(request)}>{request.ticket || '-'}</td>
-                <td onClick={() => onEdit(request)}>{request.location || '—'}</td>
-                <td onClick={() => onEdit(request)}>{request.description || '—'}</td>
-                <td onClick={() => onEdit(request)}>{request.status || '—'}</td>
-                <td onClick={() => onEdit(request)}>{request.assignee || '—'}</td>
-                <td onClick={() => onEdit(request)}>{request.receivedAt ? formatDate(request.receivedAt) : '—'}</td>
-                <td><button type="button" className="secondary-btn" onClick={(event) => { event.stopPropagation(); onDelete(request.id); }}>ลบ</button></td>
-              </tr>
+      {!isLoading && !error && (
+        <>
+          <div className="table-wrap ui-card" style={{ background: '#fff', border: '1px solid #e4e9e8', borderRadius: '18px', overflow: 'hidden', marginBottom: '12px', boxShadow: '0 12px 32px rgba(24, 36, 43, 0.05)' }}>
+            {groupedStatuses.length === 0 ? (
+              <div style={{ padding: '28px 20px', color: '#718087' }}>ไม่มีงานในเงื่อนไขนี้</div>
+            ) : groupedStatuses.map((group) => (
+              <div key={group.status} style={{ borderBottom: '1px solid #eef1ef' }}>
+                <div style={{ background: 'linear-gradient(135deg, #f4f9f9 0%, #eef3f3 100%)', padding: '10px 14px', fontSize: '14px', fontWeight: 600, color: '#18242b', borderBottom: '1px solid #e4e9e8' }}>
+                  {group.status}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 0.8fr 1.3fr 1.7fr 1.2fr 0.8fr', fontSize: '12px', color: '#18242b' }}>
+                  {['ลูกค้า', 'อ้างอิง', 'เลขติดตาม', 'สถานที่/สาขา', 'ผู้ดำเนินการ', 'จัดการ'].map((label) => (
+                    <div key={label} style={{ padding: '8px 10px', background: '#f7f8fc', borderBottom: '1px solid #dfe3ee', borderRight: '1px solid #eef1ef', fontWeight: 700, color: '#59627a' }}>{label}</div>
+                  ))}
+                  {group.items.map((request) => (
+                    <React.Fragment key={request.id}>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => onEdit(request)}>{request.customer || '—'}</div>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => onEdit(request)}>{request.ref || '-'}</div>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => onEdit(request)}>{request.ticket || '-'}</div>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => onEdit(request)}>{request.location || '—'}</div>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => onEdit(request)}>{request.assignee || '—'}</div>
+                      <div style={{ padding: '8px 8px', borderBottom: '1px solid #eef1ef', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <button type="button" className="secondary-btn" onClick={(event) => { event.stopPropagation(); onEdit(request); }}>แก้ไข</button>
+                      </div>
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginTop: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#718087', fontSize: '12px' }}>หน้า</span>
+              <button type="button" className="secondary-btn" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>ก่อนหน้า</button>
+              <span style={{ fontSize: '12px', color: '#18242b' }}>{page} / {totalPages}</span>
+              <button type="button" className="secondary-btn" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page === totalPages}>ถัดไป</button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#718087', fontSize: '12px' }}>แสดง</span>
+              <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))} style={{ height: '36px', borderRadius: '6px', border: '1px solid #dfe5e4', background: '#fff', padding: '0 8px' }}>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+              </select>
+            </div>
+          </div>
+        </>
+      )}
     </section>
   );
 }
 
-function Metric({ label, value, className = '' }) {
+function Metric({ label, value, className = '', style = {} }) {
   return (
-    <div className="metric">
-      <label>{label}</label>
-      <strong className={className}>{value}</strong>
+    <div className="metric" style={{ background: '#fff', border: '1px solid #edf0ef', borderRadius: '18px', boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', padding: '16px', ...style }}>
+      <label style={{ display: 'block', fontSize: '13px', color: '#718087', marginBottom: '10px' }}>{label}</label>
+      <strong className={className} style={{ display: 'block', fontSize: '28px', lineHeight: 1.2, color: '#18242b' }}>{value}</strong>
     </div>
   );
 }
 
-function RequestModal({ request, requests = [], onClose, onSave }) {
+function RequestEditor({ request, requests = [], onClose, onSave }) {
   const [form, setForm] = useState(() => ({
     ...emptyRequest,
     ...normalizeRequest(request),
     receivedAt: request.id ? (request.receivedAt || new Date().toISOString().slice(0, 16)) : new Date().toISOString().slice(0, 16),
     ticket: request.ticket || '',
   }));
-  const [assigneeDraft, setAssigneeDraft] = useState('');
-
-  const assigneeList = (form.assignee || '')
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
-
-  const addAssignee = () => {
-    const value = assigneeDraft.trim();
-    if (!value) return;
-    const nextList = [...new Set([...assigneeList, value])];
-    setForm({ ...form, assignee: nextList.join(', ') });
-    setAssigneeDraft('');
-  };
-
-  const removeAssignee = (value) => {
-    const nextList = assigneeList.filter((item) => item !== value);
-    setForm({ ...form, assignee: nextList.join(', ') });
-  };
+  const [dropdownData, setDropdownData] = useState(getStoredDropdownData());
+  const [isSaving, setIsSaving] = useState(false);
 
   const update = (event) => {
     const nextForm = { ...form, [event.target.name]: event.target.value };
     setForm(nextForm);
   };
 
-  const select = (name, label, options, required = false) => (
-    <label key={name}>
-      {label}
-      <select name={name} value={form[name] || ''} onChange={update} required={required}>
-        <option value="">เลือก...</option>
-        {options.map((option) => (
-          <option key={option} value={option}>{option}</option>
-        ))}
-      </select>
-    </label>
-  );
+  const handleAddDropdownValue = (field, value) => {
+    addDropdownValue(field, value);
+    const newData = getStoredDropdownData();
+    setDropdownData(newData);
+  };
+
+  const handleRemoveDropdownValue = (field, value) => {
+    removeDropdownValue(field, value);
+    const newData = getStoredDropdownData();
+    setDropdownData(newData);
+  };
 
   const text = (name, label, required = false, type = 'text') => (
-    <label key={name}>
-      {label}{required && <em>*</em>}
+    <label key={name} className="editor-field">
+      <span>{label}{required && <em>*</em>}</span>
       <input name={name} type={type} value={form[name] || ''} onChange={update} required={required} />
     </label>
   );
 
   return (
-    <div className="modal form-modal" onClick={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="modal-panel">
+    <section className="view active-view">
+      <div className="editor-shell">
         <div className="form-topbar">
           <button type="button" className="icon-btn" onClick={onClose}>×</button>
-          <h2>DataServiceDR Form</h2>
+          <h2>{request.id ? 'แก้ไขงาน' : 'เพิ่มงานใหม่'}</h2>
           <div>
-            <button type="button" className="secondary-btn" onClick={onClose}>Cancel</button>
-            <button type="submit" form="serviceForm" className="primary-btn">Save</button>
+            <button type="button" className="secondary-btn" onClick={onClose}>ยกเลิก</button>
+            <button type="submit" form="serviceForm" className="primary-btn" disabled={isSaving}>
+              {isSaving ? 'กำลังบันทึก...' : 'บันทึก'}
+            </button>
           </div>
         </div>
 
-        <form id="serviceForm" onSubmit={(event) => { event.preventDefault(); onSave(form); }}>
-          <div className="form-column">
+        <form id="serviceForm" className="editor-form" onSubmit={async (event) => {
+          event.preventDefault();
+          if (isSaving) return;
+          setIsSaving(true);
+          try {
+            await onSave(form);
+          } finally {
+            setIsSaving(false);
+          }
+        }}>
+          <div className="editor-grid">
             {text('ref', 'Ref.', true)}
-            {select('source', 'แหล่งที่มา', ['ไลน์', 'โทรศัพท์', 'อีเมล', 'เว็บไซต์'])}
+            <EditableDropdown
+              name="source"
+              label="แหล่งที่มา"
+              value={form.source || ''}
+              options={dropdownData.source || ['ไลน์', 'โทรศัพท์', 'อีเมล', 'เว็บไซต์']}
+              onChange={update}
+              onAddOption={(value) => {
+                handleAddDropdownValue('source', value);
+                update({ target: { name: 'source', value } });
+              }}
+              onRemoveOption={(value) => handleRemoveDropdownValue('source', value)}
+            />
             {text('receivedAt', 'วันเวลาที่รับแจ้ง', true, 'datetime-local')}
-            {!request.id && <div className="field-hint">เลขติดตามจะถูกสร้างอัตโนมัติหลังบันทึก</div>}
+            {!request.id && <div className="field-hint editor-field editor-field-span">เลขติดตามจะถูกสร้างอัตโนมัติหลังบันทึก</div>}
             {request.id && text('ticket', 'เลขติดตาม', false)}
-            {select('customer', 'ลูกค้า', ['BMN', 'โรงพยาบาลมิตรภาพ', 'Workoplus', 'Besides Umi', 'GQ', 'บริษัท ดี.อาร์.แอดเวอร์ไทซิ่ง จำกัด'], true)}
-            {select('location', 'สถานที่/สาขา', ['Sukhumvit Corner', 'โรงพยาบาลมิตรภาพ สระบุรี', 'Levis Siam Paragon', 'Besides Umi', 'Mega bangna', 'True Shop Central Plaza Westgate'], true)}
+            <EditableDropdown
+              name="customer"
+              label="ลูกค้า"
+              value={form.customer || ''}
+              options={dropdownData.customer || []}
+              onChange={update}
+              onAddOption={(value) => {
+                handleAddDropdownValue('customer', value);
+                update({ target: { name: 'customer', value } });
+              }}
+              onRemoveOption={(value) => handleRemoveDropdownValue('customer', value)}
+              required
+            />
+            <EditableDropdown
+              name="location"
+              label="สถานที่/สาขา"
+              value={form.location || ''}
+              options={dropdownData.location || []}
+              onChange={update}
+              onAddOption={(value) => {
+                handleAddDropdownValue('location', value);
+                update({ target: { name: 'location', value } });
+              }}
+              onRemoveOption={(value) => handleRemoveDropdownValue('location', value)}
+              required
+            />
             {text('site', 'สถานที่ตั้ง')}
             {text('contact', 'ผู้ติดต่อ')}
             {text('phone', 'เบอร์ติดต่อ')}
             {text('description', 'ข้อมูลการรับแจ้ง', true)}
-            <FileField name="image" label="รูปภาพที่แจ้ง" value={form.image} onChange={update} />
-            <div className="field-group">
+            <div className="editor-field editor-field-span">
+              <FileField name="image" label="รูปภาพที่แจ้ง" value={form.image} onChange={update} />
+            </div>
+            <div className="field-group editor-field">
               <span>MA</span>
               <div className="segmented">
                 <button type="button" className={form.ma === 'N' ? 'selected' : ''} onClick={() => setForm({ ...form, ma: 'N' })}>N</button>
                 <button type="button" className={form.ma === 'Y' ? 'selected' : ''} onClick={() => setForm({ ...form, ma: 'Y' })}>Y</button>
               </div>
             </div>
-            {select('jobType', 'ลักษณะงาน', ['แก้ไขหน้างาน', 'รีโมท', 'แนะนำ', 'ประเมินราคา'], true)}
-            {select('status', 'สถานะงาน', ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'เสร็จสิ้น', 'รอเสนอราคา'], true)}
-            <div className="field-with-action" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span>ผู้ดำเนินการ</span>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  value={assigneeDraft}
-                  onChange={(event) => setAssigneeDraft(event.target.value)}
-                  placeholder="เพิ่มผู้ดำเนินการ"
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      addAssignee();
-                    }
-                  }}
-                />
-                <button type="button" title="เพิ่มผู้ดำเนินการ" onClick={addAssignee}>+</button>
-              </div>
-              {assigneeList.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {assigneeList.map((value) => (
-                    <span key={value} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 8px', border: '1px solid #d0d7de', borderRadius: '999px', background: '#f6f8fa' }}>
-                      {value}
-                      <button type="button" onClick={() => removeAssignee(value)} aria-label={`ลบ ${value}`} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#d1242f', fontWeight: '700' }}>×</button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <input type="hidden" name="assignee" value={form.assignee || ''} />
+            <EditableDropdown
+              name="jobType"
+              label="ลักษณะงาน"
+              value={form.jobType || ''}
+              options={dropdownData.jobType || ['แนะนำ', 'แก้ไขหน้างาน', 'รีโมท', 'ประเมินราคา']}
+              onChange={update}
+              onAddOption={(value) => {
+                handleAddDropdownValue('jobType', value);
+                update({ target: { name: 'jobType', value } });
+              }}
+              onRemoveOption={(value) => handleRemoveDropdownValue('jobType', value)}
+              required
+            />
+            <EditableDropdown
+              name="status"
+              label="สถานะงาน"
+              value={form.status || ''}
+              options={dropdownData.status || ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'เรียบร้อยปกติ', 'รอเสนอราคา']}
+              onChange={update}
+              onAddOption={(value) => {
+                handleAddDropdownValue('status', value);
+                update({ target: { name: 'status', value } });
+              }}
+              onRemoveOption={(value) => handleRemoveDropdownValue('status', value)}
+              required
+            />
+            <EditableDropdown
+              name="assignee"
+              label="ผู้ดำเนินการ"
+              value={form.assignee || ''}
+              options={dropdownData.assignee || []}
+              onChange={update}
+              onAddOption={(value) => {
+                handleAddDropdownValue('assignee', value);
+                update({ target: { name: 'assignee', value } });
+              }}
+              onRemoveOption={(value) => handleRemoveDropdownValue('assignee', value)}
+            />
+            <EditableDropdown
+              name="equipment"
+              label="เกี่ยวกับอุปกรณ์"
+              value={form.equipment || ''}
+              options={dropdownData.equipment || ['จอ LED', 'Kiosk', 'กล่องเล่นสื่อ', 'อื่นๆ']}
+              onChange={update}
+              onAddOption={(value) => {
+                handleAddDropdownValue('equipment', value);
+                update({ target: { name: 'equipment', value } });
+              }}
+              onRemoveOption={(value) => handleRemoveDropdownValue('equipment', value)}
+            />
+            <div className="editor-field editor-field-span">
+              <FileField name="completedImage" label="รูปภาพที่ดำเนินการเสร็จแล้ว" value={form.completedImage} onChange={update} />
             </div>
-            {select('equipment', 'เกี่ยวกับอุปกรณ์', ['จอ LED', 'Kiosk', 'กล่องเล่นสื่อ', 'อื่นๆ'])}
-            <FileField name="completedImage" label="รูปภาพที่ดำเนินการเสร็จแล้ว" value={form.completedImage} onChange={update} />
             {text('completedAt', 'วันเวลาเสร็จ', false, 'datetime-local')}
             {text('map', 'MAP')}
             {text('vehicle', 'ทะเบียนรถ')}
@@ -545,30 +846,111 @@ function RequestModal({ request, requests = [], onClose, onSave }) {
           </div>
         </form>
       </div>
-    </div>
+    </section>
   );
 }
 
 function FileField({ name, label, value, onChange }) {
-  const handleFile = (event) => {
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFile = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) return;
-    if (file.size > 3 * 1024 * 1024) {
-      window.alert('กรุณาเลือกไฟล์ภาพขนาดไม่เกิน 3 MB');
+
+    if (!file.type.startsWith('image/')) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'ไฟล์ไม่ถูกต้อง',
+        text: 'กรุณาเลือกไฟล์รูปภาพเท่านั้น',
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#ef765e',
+      });
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => onChange({ target: { name, value: reader.result } });
-    reader.readAsDataURL(file);
+    if (file.size > 10 * 1024 * 1024) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'ไฟล์มีขนาดใหญ่เกินไป',
+        text: 'กรุณาเลือกไฟล์ภาพขนาดไม่เกิน 10 MB',
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: '#ef765e',
+      });
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const timestamp = Date.now();
+      const fileName = `${timestamp}-${file.name}`;
+      const reader = new FileReader();
+
+      reader.onload = async () => {
+        try {
+          const base64 = reader.result.split(',')[1];
+          const uploadResponse = await fetch(`${API_BASE_URL}/api/upload`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              file: base64,
+              fileName,
+              bucket: 'service-desk-images',
+            }),
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error('Upload failed');
+          }
+
+          const { url } = await uploadResponse.json();
+          onChange({ target: { name, value: url } });
+
+          await Swal.fire({
+            icon: 'success',
+            title: 'อัพโหลดสำเร็จ',
+            text: 'รูปภาพถูกอัพโหลดเสร็จแล้ว',
+            confirmButtonText: 'ตกลง',
+            confirmButtonColor: '#5b5ce2',
+            timer: 1500,
+            timerProgressBar: true,
+          });
+        } catch (uploadError) {
+          await Swal.fire({
+            icon: 'error',
+            title: 'อัพโหลดไม่สำเร็จ',
+            text: uploadError instanceof Error ? uploadError.message : 'ไม่สามารถอัพโหลดรูปภาพได้',
+            confirmButtonText: 'ปิด',
+            confirmButtonColor: '#ef765e',
+          });
+        } finally {
+          setIsUploading(false);
+        }
+      };
+
+      reader.readAsDataURL(file);
+    } catch (error) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'เกิดข้อผิดพลาด',
+        text: error instanceof Error ? error.message : 'ไม่สามารถประมวลผลไฟล์ได้',
+        confirmButtonText: 'ปิด',
+        confirmButtonColor: '#ef765e',
+      });
+      setIsUploading(false);
+    }
   };
 
   return (
     <label className="file-field">
       {label}
-      <input name={name} type="file" accept="image/*" onChange={handleFile} />
-      <span>▣</span>
+      <input
+        name={name}
+        type="file"
+        accept="image/*"
+        onChange={handleFile}
+        disabled={isUploading}
+      />
+      <span>{isUploading ? '⟳' : '▣'}</span>
       {value && <img className="image-preview" src={value} alt="ตัวอย่างรูปภาพ" />}
     </label>
   );

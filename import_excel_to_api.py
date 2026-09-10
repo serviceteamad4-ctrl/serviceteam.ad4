@@ -1,27 +1,53 @@
 import os
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 import requests
-from datetime import datetime
 
 BASE_DIR = Path(__file__).resolve().parent
-EXCEL_FILE = next((str(path) for path in sorted(BASE_DIR.glob("DataServiceDR*.xlsx"))), str(BASE_DIR / "DataServiceDR.xlsx"))
-API_URL = "http://localhost:4001/api/requests"
+EXCEL_CANDIDATES = sorted(BASE_DIR.glob("DataServiceDR*.xlsx"))
+EXCEL_FILE = str(EXCEL_CANDIDATES[0]) if EXCEL_CANDIDATES else str(BASE_DIR / "DataServiceDR.xlsx")
+API_URL = os.getenv("API_URL", "http://localhost:4001/api/requests")
+
+FIELD_ALIASES = {
+    "customer": ["ลูกค้า", "Customer", "Customer Name"],
+    "ref": ["Ref.", "Ref", "ref", "ระดับ", "Level"],
+    "source": ["ช่องทาง", "Source", "Channel"],
+    "receivedAt": ["วันเวลารับแจ้ง", "Received At", "Date Received", "วันที่รับแจ้ง"],
+    "ticket": ["เลขติดตาม", "Ticket", "Tracking Number", "เลขติดตามงาน"],
+    "location": ["สถานที่", "Location", "Site", "สถานที่ติดตั้ง"],
+    "contact": ["ผู้ติดต่อ", "Contact", "Contact Name"],
+    "phone": ["Phone", "เบอร์โทร", "โทรศัพท์"],
+    "description": ["รายละเอียด", "Description", "Issue Detail"],
+    "jobType": ["ลักษณะงาน", "Job Type", "ประเภทงาน"],
+    "status": ["สถานะ", "Status"],
+    "assignee": ["ผู้ดำเนินการ", "Assignee", "Technician"],
+    "appointment": ["วันเวลานัดหมาย", "Appointment", "Scheduled Time"],
+    "completedAt": ["วันเวลาเสร็จ", "Completed At", "Finished At"],
+    "action": ["การดำเนินการ", "Action", "Work Done"],
+    "notes": ["หมายเหตุ", "Notes", "Remark"],
+}
+
+
+def normalize_string(value):
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    return str(value).strip()
 
 
 def normalize_datetime(value):
-    if pd.isna(value):
+    if value is None or (isinstance(value, float) and pd.isna(value)):
         return None
     if isinstance(value, str):
-        value = value.strip()
-        if not value:
+        text = value.strip()
+        if not text:
             return None
         try:
-            return datetime.fromisoformat(value.replace("Z", "+00:00")).isoformat()
+            return datetime.fromisoformat(text.replace("Z", "+00:00")).isoformat()
         except Exception:
             try:
-                return pd.to_datetime(value).isoformat()
+                return pd.to_datetime(text).isoformat()
             except Exception:
                 return None
     if hasattr(value, "isoformat"):
@@ -29,7 +55,49 @@ def normalize_datetime(value):
             return value.isoformat()
         except Exception:
             return None
-    return str(value)
+    try:
+        return pd.to_datetime(value).isoformat()
+    except Exception:
+        return None
+
+
+def get_value(row, names):
+    for name in names:
+        if name in row and not pd.isna(row.get(name)):
+            return row.get(name)
+    return None
+
+
+def build_payload(row):
+    payload = {}
+    for field, aliases in FIELD_ALIASES.items():
+        value = get_value(row, aliases)
+        if field in {"receivedAt", "appointment", "completedAt"}:
+            payload[field] = normalize_datetime(value)
+        else:
+            payload[field] = normalize_string(value)
+    return payload
+
+
+def load_excel_rows(path):
+    xls = pd.ExcelFile(path)
+    all_rows = []
+
+    for sheet in xls.sheet_names:
+        try:
+            df = pd.read_excel(path, sheet_name=sheet)
+        except Exception as exc:
+            print(f"Skip sheet '{sheet}' due to read error: {exc}")
+            continue
+
+        if df.empty:
+            continue
+
+        for _, row in df.iterrows():
+            normalized_row = row.to_dict()
+            all_rows.append(build_payload(normalized_row))
+
+    return all_rows
 
 
 def main():
@@ -37,35 +105,28 @@ def main():
         raise FileNotFoundError(f"ไม่พบไฟล์ Excel: {EXCEL_FILE}")
 
     print(f"กำลังอ่านไฟล์: {EXCEL_FILE}")
-    df = pd.read_excel(EXCEL_FILE)
-    print(f"พบข้อมูล {len(df)} rows")
+    rows = load_excel_rows(EXCEL_FILE)
+    print(f"พบข้อมูลทั้งหมด {len(rows)} rows")
 
-    for index, row in df.iterrows():
-        payload = {
-            "customer": str(row.get("ลูกค้า", "") or ""),
-            "ref": str(row.get("ระดับ", "") or "") or str(row.get("Ref.", "") or ""),
-            "source": str(row.get("ช่องทาง", "") or ""),
-            "receivedAt": normalize_datetime(row.get("วันเวลารับแจ้ง")),
-            "ticket": str(row.get("เลขติดตาม", "") or ""),
-            "location": str(row.get("สถานที่", "") or ""),
-            "contact": str(row.get("ผู้ติดต่อ", "") or ""),
-            "description": str(row.get("รายละเอียด", "") or ""),
-            "jobType": str(row.get("ลักษณะงาน", "") or ""),
-            "status": str(row.get("สถานะ", "") or ""),
-            "assignee": str(row.get("ผู้ดำเนินการ", "") or ""),
-            "appointment": normalize_datetime(row.get("วันเวลานัดหมาย")),
-            "completedAt": normalize_datetime(row.get("วันเวลาเสร็จ")),
-            "action": str(row.get("การดำเนินการ", "") or ""),
-            "notes": str(row.get("หมายเหตุ", "") or "")
-        }
+    success = 0
+    failed = 0
+    for index, payload in enumerate(rows, start=1):
+        try:
+            response = requests.post(API_URL, json=payload, timeout=30)
+            if response.status_code >= 400:
+                print(f"Row {index} failed: status={response.status_code} payload={payload}")
+                print(response.text)
+                failed += 1
+                continue
+            success += 1
+            if index % 50 == 0:
+                print(f"ส่งแล้ว {index}/{len(rows)} rows")
+        except Exception as exc:
+            failed += 1
+            print(f"Row {index} exception: {exc}")
+            print(payload)
 
-        response = requests.post(API_URL, json=payload, timeout=30)
-        print(f"Row {index + 1}: status={response.status_code} customer={payload['customer']}")
-
-        if response.status_code >= 400:
-            print(response.text)
-
-    print("Import complete")
+    print(f"Import complete: success={success}, failed={failed}")
 
 
 if __name__ == "__main__":

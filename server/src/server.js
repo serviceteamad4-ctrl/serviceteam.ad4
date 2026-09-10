@@ -2,25 +2,36 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { prisma } from './db.js';
+import { uploadImageToStorage, deleteImageFromStorage } from './supabase.js';
 
 const app = express();
 const PORT = Number(process.env.PORT || 4001);
 
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'https://*.vercel.app',
-    process.env.FRONTEND_URL,
-  ].filter(Boolean),
+  origin: (origin, callback) => {
+    const isLocalFrontend = !origin
+      || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    const isConfiguredFrontend = origin && origin === process.env.FRONTEND_URL;
+
+    callback(null, isLocalFrontend || isConfiguredFrontend);
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
 
+app.get('/', (_req, res) => {
+  res.json({
+    ok: true,
+    message: 'Service desk API is running',
+    health: '/api/health',
+  });
+});
+
 app.get('/api/health', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
-    res.json({ ok: true, message: 'Service desk API is healthy' });
+    const { _count: requestCount } = await prisma.request.aggregate({ _count: true });
+    res.json({ ok: true, message: 'Service desk API is healthy', requestCount });
   } catch (error) {
     res.status(500).json({ ok: false, message: 'Database unavailable', error: String(error) });
   }
@@ -29,6 +40,37 @@ app.get('/api/health', async (_req, res) => {
 app.get('/api/requests', async (_req, res) => {
   try {
     const requests = await prisma.request.findMany({
+      select: {
+        id: true,
+        customer: true,
+        ref: true,
+        source: true,
+        receivedAt: true,
+        ticket: true,
+        location: true,
+        site: true,
+        contact: true,
+        phone: true,
+        description: true,
+        image: true,
+        ma: true,
+        jobType: true,
+        status: true,
+        assignee: true,
+        appointment: true,
+        appointmentEnd: true,
+        action: true,
+        result: true,
+        equipment: true,
+        completedImage: true,
+        completedAt: true,
+        map: true,
+        vehicle: true,
+        notes: true,
+        file: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       orderBy: { receivedAt: 'desc' },
     });
     res.json(requests);
@@ -136,10 +178,39 @@ app.put('/api/requests/:id', async (req, res) => {
 
 app.delete('/api/requests/:id', async (req, res) => {
   try {
+    const request = await prisma.request.findUnique({
+      where: { id: req.params.id },
+      select: { image: true, completedImage: true },
+    });
+
+    if (request?.image) {
+      await deleteImageFromStorage('service-desk-images', request.image);
+    }
+    if (request?.completedImage) {
+      await deleteImageFromStorage('service-desk-images', request.completedImage);
+    }
+
     await prisma.request.delete({ where: { id: req.params.id } });
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete request', error: String(error) });
+  }
+});
+
+app.post('/api/upload', async (req, res) => {
+  try {
+    const { file, fileName, bucket = 'service-desk-images' } = req.body;
+
+    if (!file) {
+      return res.status(400).json({ message: 'No file provided' });
+    }
+
+    const buffer = Buffer.from(file, 'base64');
+    const publicUrl = await uploadImageToStorage(bucket, buffer, fileName);
+
+    res.json({ url: publicUrl });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to upload image', error: String(error) });
   }
 });
 

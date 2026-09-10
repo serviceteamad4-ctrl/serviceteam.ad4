@@ -6,13 +6,18 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "import:excel": "node import_excel_to_api.mjs"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.116.0",
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
+    "jspdf": "^4.2.1",
     "react": "latest",
-    "react-dom": "latest"
-  },
-  "devDependencies": {}
+    "react-dom": "latest",
+    "sweetalert2": "^11.26.25",
+    "vite": "latest",
+    "xlsx": "^0.18.5"
+  }
 }

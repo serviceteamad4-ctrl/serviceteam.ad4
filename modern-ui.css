@@ -1,0 +1,225 @@
+:root {
+  --modern-bg: #f5f6fb;
+  --modern-surface: rgba(255, 255, 255, 0.92);
+  --modern-border: #e3e5f0;
+  --modern-text: #172033;
+  --modern-muted: #6f7890;
+  --modern-primary: #5b5ce2;
+  --modern-accent: #f06b8a;
+  --modern-radius: 18px;
+}
+
+body {
+  background: radial-gradient(circle at 80% -10%, #ecebff 0, transparent 34%), var(--modern-bg);
+  color: var(--modern-text);
+}
+
+.sidebar {
+  width: 264px;
+  padding: 28px 16px 20px;
+  background: linear-gradient(165deg, #25265f 0%, #171936 100%);
+  box-shadow: 12px 0 35px rgba(29, 31, 83, .14);
+}
+
+.brand {
+  padding: 0 14px 48px;
+}
+
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  box-shadow: 0 8px 18px rgba(242, 123, 99, .3);
+}
+
+.nav-item {
+  border-radius: 13px;
+  padding: 14px 15px;
+  transition: background .2s, transform .2s, color .2s;
+}
+
+.nav-item:hover {
+  transform: translateX(3px);
+}
+
+.nav-item.active {
+  background: linear-gradient(90deg, rgba(132, 129, 255, .3), rgba(132, 129, 255, .08));
+  box-shadow: inset 3px 0 var(--modern-accent);
+}
+
+.topbar {
+  height: 78px;
+  padding: 0 4.5vw;
+  background: rgba(255, 255, 255, .8);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(227, 234, 237, .85);
+}
+
+.top-actions > span {
+  padding: 8px 12px;
+  border: 1px solid var(--modern-border);
+  border-radius: 999px;
+  background: #fff;
+  font-weight: 600;
+}
+
+.avatar {
+  width: 38px;
+  height: 38px;
+  box-shadow: 0 4px 12px rgba(117, 75, 52, .15);
+}
+
+.view {
+  padding-top: 38px;
+}
+
+.primary-btn,
+.secondary-btn {
+  min-height: 42px;
+  border-radius: 12px;
+  transition: transform .18s, box-shadow .18s, border-color .18s;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, #6c6df0, #5051c9);
+  box-shadow: 0 8px 20px rgba(91, 92, 226, .27);
+}
+
+.primary-btn:hover,
+.secondary-btn:hover {
+  transform: translateY(-2px);
+}
+
+.metric {
+  border-radius: var(--modern-radius) !important;
+  background: var(--modern-surface);
+  box-shadow: 0 12px 28px rgba(48, 47, 105, .08) !important;
+}
+
+.metric strong {
+  font-size: 32px !important;
+}
+
+.ui-toolbar {
+  border-radius: var(--modern-radius) !important;
+  padding: 14px !important;
+  background: rgba(255, 255, 255, .72);
+  backdrop-filter: blur(12px);
+}
+
+.table-wrap {
+  border-radius: var(--modern-radius) !important;
+  box-shadow: 0 14px 32px rgba(48, 47, 105, .08) !important;
+}
+
+.table-wrap > div > div:first-child {
+  letter-spacing: .01em;
+}
+
+.editor-shell,
+.detail-card,
+.report-card {
+  border-radius: 22px !important;
+  border-color: var(--modern-border) !important;
+  box-shadow: 0 18px 42px rgba(48, 47, 105, .08) !important;
+}
+
+.form-topbar {
+  padding: 4px 6px 14px;
+}
+
+.form-topbar h2 {
+  font-size: 23px;
+  font-weight: 700;
+}
+
+.editor-form input,
+.editor-form select,
+.editor-form textarea {
+  border-color: #dce5e8;
+  background: #fbfdfd;
+}
+
+.editor-form input:hover,
+.editor-form select:hover,
+.editor-form textarea:hover {
+  border-color: #b9cfce;
+}
+
+.month-picker-button {
+  appearance: none;
+  transition: background .15s, border-color .15s, transform .15s;
+}
+
+.month-picker-button:hover,
+.month-picker-button:focus-visible {
+  background: #eeedff !important;
+  border-color: #aaa9ee !important;
+  outline: none;
+}
+
+.month-picker-button:active {
+  transform: scale(.94);
+}
+
+.detail-header h1,
+.page-heading h1 {
+  font-weight: 800;
+}
+
+.detail-status .status,
+.detail-status .level {
+  border-radius: 999px;
+  padding: 7px 11px;
+}
+
+.swal2-popup {
+  border-radius: 22px !important;
+  padding: 1.6em !important;
+}
+
+.swal2-title {
+  font-family: inherit !important;
+  font-size: 1.35rem !important;
+}
+
+@media (max-width: 850px) {
+  .sidebar {
+    width: 220px;
+  }
+}
+
+@media (max-width: 620px) {
+  .sidebar {
+    width: 76px;
+    padding-inline: 10px;
+  }
+
+  .brand {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .brand > div,
+  .side-foot > div:last-child,
+  .nav-item:not(.active)::first-letter {
+    display: none;
+  }
+
+  .nav-item {
+    text-align: center;
+    padding-inline: 8px;
+  }
+
+  .nav-item span {
+    width: auto;
+  }
+
+  .topbar {
+    padding: 0 16px;
+  }
+
+  .view {
+    padding: 26px 14px 52px;
+  }
+}
