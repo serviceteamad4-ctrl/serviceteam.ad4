@@ -11,6 +11,14 @@ import { dateFields as filterDateFields } from './FilterPanel.jsx';
 // ตัด "/" ท้ายออก กัน URL ซ้อนกัน (เช่น "https://api.example.com/" + "/api/requests" จะกลายเป็น "...com//api/requests" ซึ่ง 404)
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
+// ลำดับสถานะที่ต้องแสดง "รับเรื่อง" มาก่อนเสมอ ใช้ทั้งจัดเรียงก่อนแบ่งหน้าและจัดกลุ่มในตาราง
+// เพื่อไม่ให้การแบ่งหน้าตัดกลุ่มสถานะเดียวกันขาดออกจากกันแบบสุ่มตามวันที่
+const STATUS_ORDER = ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รออะไหล่', 'เรียบร้อยปกติ', 'รอเสนอราคา'];
+const statusRank = (status) => {
+  const index = STATUS_ORDER.indexOf(status);
+  return index === -1 ? STATUS_ORDER.length : index;
+};
+
 const emptyRequest = {
   ref: '',
   customer: '',
@@ -40,6 +48,15 @@ const emptyRequest = {
 };
 
 const formatDate = (value) => value ? new Intl.DateTimeFormat('th-TH-u-ca-gregory', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }).format(new Date(value)) : '-';
+
+// input type="datetime-local" ต้องการ "YYYY-MM-DDTHH:mm" แบบเวลาท้องถิ่น ไม่ใช่ UTC
+// toISOString() คืนเวลา UTC เสมอ ถ้าใช้ตรงๆ เวลาที่ขึ้นในฟอร์มจะเพี้ยนไปตาม timezone offset (เช่น ไทย +7 ชม.)
+const toDateTimeLocalValue = (value) => {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
 
 const monthKeyFromValue = (value) => {
   if (!value) return '';
@@ -313,7 +330,11 @@ function App() {
         }
         return true;
       })
-      .sort((a, b) => (b.receivedAt ? Date.parse(b.receivedAt) : 0) - (a.receivedAt ? Date.parse(a.receivedAt) : 0));
+      .sort((a, b) => {
+        const rankDiff = statusRank(a.status) - statusRank(b.status);
+        if (rankDiff !== 0) return rankDiff;
+        return (b.receivedAt ? Date.parse(b.receivedAt) : 0) - (a.receivedAt ? Date.parse(a.receivedAt) : 0);
+      });
   }, [requests, debouncedQuery, status, advancedFilters, selectedMonth]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -539,7 +560,7 @@ function App() {
               onAdd={() => setEditing({ ...emptyRequest })}
               onEdit={(request) => setEditing(request)}
               onExport={exportCsv}
-              onExportPdf={() => printPdf('Service Desk - รายการที่กรอง', filtered)}
+              onExportPdf={() => printPdf('รายการที่กรอง', filtered)}
               isLoading={isLoading}
               error={error}
             />
@@ -563,16 +584,11 @@ function App() {
   );
 }
 
-function RequestsView({ requests, filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error }) {
+function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error }) {
   const monthInputRef = useRef(null);
-  const selectedMonthRequests = useMemo(
-    () => requests.filter((r) => !selectedMonth || !r.receivedAt || monthKeyFromValue(r.receivedAt) === selectedMonth),
-    [requests, selectedMonth],
-  );
-  const active = useMemo(() => selectedMonthRequests.filter((r) => r.status !== 'เรียบร้อยปกติ').length, [selectedMonthRequests]);
-  const done = selectedMonthRequests.length - active;
-  const statusOrder = ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รออะไหล่', 'เรียบร้อยปกติ', 'รอเสนอราคา'];
-  const groupedStatuses = useMemo(() => (status === 'ทั้งหมด' ? statusOrder : [status])
+  const active = useMemo(() => filtered.filter((r) => r.status !== 'เรียบร้อยปกติ').length, [filtered]);
+  const done = filtered.length - active;
+  const groupedStatuses = useMemo(() => (status === 'ทั้งหมด' ? STATUS_ORDER : [status])
     .map((groupStatus) => ({
       status: groupStatus,
       items: pageItems.filter((request) => request.status === groupStatus),
@@ -586,7 +602,7 @@ function RequestsView({ requests, filtered, pageItems, query, setQuery, status, 
       </div>
 
       <div className="metric-row ui-card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(180px, 1fr))', gap: '14px', marginBottom: '14px' }}>
-        <Metric label="งานทั้งหมดในหน้านี้" value={selectedMonthRequests.length} style={{ boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', borderRadius: '18px', padding: '14px 16px', minHeight: '112px' }} />
+        <Metric label="งานทั้งหมดในหน้านี้" value={filtered.length} style={{ boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', borderRadius: '18px', padding: '14px 16px', minHeight: '112px' }} />
         <Metric label="งานที่ยังเปิดอยู่ในหน้านี้" value={active} className="accent" style={{ boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', borderRadius: '18px', padding: '14px 16px', minHeight: '112px' }} />
         <Metric label="งานที่เสร็จแล้วในหน้านี้" value={done} style={{ boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', borderRadius: '18px', padding: '14px 16px', minHeight: '112px' }} />
       </div>
@@ -707,7 +723,7 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
   const [form, setForm] = useState(() => ({
     ...emptyRequest,
     ...normalizeRequest(request),
-    receivedAt: request.id ? (request.receivedAt || new Date().toISOString().slice(0, 16)) : new Date().toISOString().slice(0, 16),
+    receivedAt: request.id ? toDateTimeLocalValue(request.receivedAt) : toDateTimeLocalValue(),
     ticket: request.ticket || '',
   }));
   const [dropdownData, setDropdownData] = useState(getStoredDropdownData());

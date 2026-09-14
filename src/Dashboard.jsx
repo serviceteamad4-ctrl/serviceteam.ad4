@@ -28,8 +28,10 @@ const groupedTypeCount = (items) => {
   return result;
 };
 
+const todayInBangkok = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+
 export default function Dashboard({ requests }) {
-  const [date, setDate] = useState('2026-08-28');
+  const [date, setDate] = useState(todayInBangkok);
   const [isExporting, setIsExporting] = useState(false);
   const reportRef = useRef(null);
 
@@ -99,9 +101,7 @@ export default function Dashboard({ requests }) {
       label: 'นัดหมายงาน รับเรื่อง',
       value: dayRequests.filter((item) => item.appointment).length,
       tone: 'yellow',
-      children: [
-        ['สถานะงาน รับเรื่อง', dayRequests.filter((item) => item.status === 'รับเรื่อง').length],
-      ],
+      children: [],
     },
     ...allRows,
   ];

@@ -136,14 +136,14 @@ body {
 .editor-form input,
 .editor-form select,
 .editor-form textarea {
-  border-color: #dce5e8;
+  border-color: #aebfbe;
   background: #fbfdfd;
 }
 
 .editor-form input:hover,
 .editor-form select:hover,
 .editor-form textarea:hover {
-  border-color: #b9cfce;
+  border-color: #8ea6a5;
 }
 
 .month-picker-button {
@@ -221,5 +221,14 @@ body {
 
   .view {
     padding: 26px 14px 52px;
+  }
+
+  /* จอแคบ: การ์ดค้นหา/ตัวกรองที่ตั้ง flex ไว้ตายตัวจะบีบตัวจนพิมพ์ไม่ได้ (เหลือแค่ไอคอน) ต้องบังคับให้ขึ้นบรรทัดใหม่แบบเต็มความกว้าง */
+  .ui-toolbar .search-box,
+  .ui-toolbar > select,
+  .ui-toolbar > .secondary-btn {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
   }
 }

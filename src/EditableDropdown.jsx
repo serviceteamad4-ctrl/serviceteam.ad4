@@ -31,9 +31,11 @@ export default function EditableDropdown({ name, label, value, options = [], onC
     }
   };
 
-  const filteredOptions = options.filter((opt) =>
-    opt.toLowerCase().includes(inputValue.toLowerCase())
-  );
+  // ตัดช่องว่างซ้ำ/ช่องว่างแบบพิเศษ (เช่น non-breaking space จากไฟล์ Excel) ออกก่อนเทียบ
+  // เพื่อให้พิมพ์คำค้นบางส่วน เช่น "bangna" แล้วเจอ "Central   Bangna" ได้แม้มีช่องว่างเกิน
+  const normalize = (text) => String(text || '').replace(new RegExp(String.fromCharCode(160), 'g'), ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  const normalizedInput = normalize(inputValue);
+  const filteredOptions = options.filter((opt) => normalize(opt).includes(normalizedInput));
 
   return (
     <label className="editor-field">
@@ -89,6 +91,11 @@ export default function EditableDropdown({ name, label, value, options = [], onC
               marginTop: '4px',
               boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
             }}
+            // กล่องนี้อยู่ใน <label> ที่ครอบ input พอกด "click" ของ label เอง (bubble ขึ้นมาจากตัวเลือกที่กด)
+            // จะสั่งโฟกัส input กลับตามพฤติกรรม native ของ label ทำให้ onFocus สั่ง setIsOpen(true) ซ้อนทับ
+            // handleSelect ที่เพิ่งสั่งปิดไป ค่าที่เลือกเลยไม่ขึ้นจนกว่าจะเอาเมาส์ออก (ซึ่งไปสั่งปิดซ้ำอีกที)
+            // ป้องกันด้วย preventDefault ตอน click เพื่อไม่ให้ label โฟกัส input กลับ
+            onClick={(e) => e.preventDefault()}
             onMouseLeave={() => !showDeleteMode && setIsOpen(false)}
           >
             {showDeleteMode ? (
