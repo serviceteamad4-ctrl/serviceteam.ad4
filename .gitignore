@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+server/node_modules/
+
+# environment variables (contain real credentials — never commit)
+.env
+.env.local
+.env.*.local
+server/.env
+server/.env.local
+
+# build output
+dist/
+server/dist/
+
+# logs
+*.log
+npm-debug.log*
+
+# editor/OS
+.DS_Store
+Thumbs.db
