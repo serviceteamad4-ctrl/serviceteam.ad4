@@ -101,7 +101,6 @@ export default function Dashboard({ requests }) {
       tone: 'yellow',
       children: [
         ['สถานะงาน รับเรื่อง', dayRequests.filter((item) => item.status === 'รับเรื่อง').length],
-        ['ยังไม่ได้จัดแพลนคิวงาน', dayRequests.filter((item) => !item.appointment).length],
       ],
     },
     ...allRows,
