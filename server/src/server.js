@@ -14,13 +14,18 @@ const REQUEST_COLUMNS = [
   'completedAt', 'map', 'vehicle', 'notes', 'file', 'createdAt', 'updatedAt',
 ];
 
+// ตัด "/" ท้ายออกก่อนเทียบ กัน FRONTEND_URL ที่ตั้งไว้ผิดแบบมี/ไม่มี "/" ต่อท้ายแล้วเทียบไม่ตรง
+const normalizeOrigin = (value) => String(value || '').replace(/\/+$/, '');
+
 app.use(cors({
   origin: (origin, callback) => {
     const isLocalFrontend = !origin
       || /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin);
-    const isConfiguredFrontend = origin && origin === process.env.FRONTEND_URL;
+    // อนุญาต *.onrender.com ทุกตัวไว้เลย เผื่อ FRONTEND_URL ยังตั้งไม่ตรง/ยังไม่ได้ตั้ง จะได้ไม่ล่มเวลา deploy ครั้งแรก
+    const isOnRender = origin && /^https:\/\/[a-z0-9-]+\.onrender\.com$/i.test(origin);
+    const isConfiguredFrontend = origin && normalizeOrigin(origin) === normalizeOrigin(process.env.FRONTEND_URL);
 
-    callback(null, isLocalFrontend || isConfiguredFrontend);
+    callback(null, isLocalFrontend || isOnRender || isConfiguredFrontend);
   },
   credentials: true,
 }));
