@@ -13,6 +13,9 @@ server/.env.local
 dist/
 server/dist/
 
+# locally-stored uploads (fallback storage when Supabase Storage bucket isn't set up)
+server/data/uploads/
+
 # logs
 *.log
 npm-debug.log*
@@ -20,3 +23,6 @@ npm-debug.log*
 # editor/OS
 .DS_Store
 Thumbs.db
+
+# local tooling config
+.claude/

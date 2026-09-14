@@ -1,19 +1,93 @@
 import { formatDate } from './requestUtils.js';
 
-const fields = [
-  ['customer', 'ลูกค้า'], ['ref', 'Ref.'], ['source', 'แหล่งที่มา'],
-  ['receivedAt', 'วันเวลาที่รับแจ้ง'], ['ticket', 'เลขที่ติดตามงาน'], ['location', 'สถานที่/สาขา'],
-  ['site', 'สถานที่ตั้ง'], ['contact', 'ผู้ติดต่อ'], ['phone', 'เบอร์ติดต่อ'], ['description', 'ข้อมูลการรับแจ้ง'],
-  ['image', 'รูปภาพที่แจ้ง'], ['ma', 'MA'], ['jobType', 'ลักษณะงาน'], ['status', 'สถานะงาน'],
-  ['assignee', 'ผู้ดำเนินการ'], ['appointment', 'วันนัดหมาย เวลาเริ่มต้น'], ['appointmentEnd', 'วันนัดหมาย เวลาสิ้นสุด'],
-  ['action', 'รายละเอียดการดำเนินการ'], ['result', 'ผลการดำเนินการ'], ['equipment', 'เกี่ยวกับอุปกรณ์'],
-  ['completedImage', 'รูปภาพที่ดำเนินการเสร็จแล้ว'], ['completedAt', 'วันเวลาเสร็จ'], ['map', 'MAP'],
-  ['vehicle', 'ทะเบียนรถ'], ['notes', 'หมายเหตุ'], ['file', 'ไฟล์'],
+// จัดกลุ่มฟิลด์เป็นหมวดหมู่ให้อ่านง่ายขึ้น แทนการแสดงเรียงยาวทีละรายการ
+const sections = [
+  {
+    title: 'ข้อมูลลูกค้า',
+    fields: [
+      ['customer', 'ลูกค้า'], ['ref', 'Ref.'], ['source', 'แหล่งที่มา'],
+      ['receivedAt', 'วันเวลาที่รับแจ้ง'], ['ticket', 'เลขที่ติดตามงาน'],
+      ['location', 'สถานที่/สาขา'], ['site', 'สถานที่ตั้ง'],
+      ['contact', 'ผู้ติดต่อ'], ['phone', 'เบอร์ติดต่อ'],
+    ],
+  },
+  {
+    title: 'รายละเอียดการแจ้งงาน',
+    fields: [
+      ['description', 'ข้อมูลการรับแจ้ง'], ['image', 'รูปภาพที่แจ้ง'],
+      ['ma', 'MA'], ['jobType', 'ลักษณะงาน'], ['status', 'สถานะงาน'],
+      ['assignee', 'ผู้ดำเนินการ'],
+      ['appointment', 'วันนัดหมาย เวลาเริ่มต้น'], ['appointmentEnd', 'วันนัดหมาย เวลาสิ้นสุด'],
+    ],
+  },
+  {
+    title: 'ผลการดำเนินการ',
+    fields: [
+      ['action', 'รายละเอียดการดำเนินการ'], ['result', 'ผลการดำเนินการ'],
+      ['equipment', 'เกี่ยวกับอุปกรณ์'], ['completedImage', 'รูปภาพที่ดำเนินการเสร็จแล้ว'],
+      ['completedAt', 'วันเวลาเสร็จ'], ['map', 'MAP'], ['vehicle', 'ทะเบียนรถ'],
+      ['notes', 'หมายเหตุ'], ['file', 'ไฟล์'],
+    ],
+  },
 ];
 
+const IMAGE_KEYS = ['image', 'completedImage'];
+const WIDE_KEYS = ['description', 'action', 'result', 'notes', 'image', 'completedImage'];
+const DATE_KEYS = ['receivedAt', 'appointment', 'appointmentEnd', 'completedAt'];
+
+// รองรับทั้งรูปแบบเก่า (data:image base64) และรูปแบบใหม่ (URL จาก Supabase Storage / เก็บบนเซิร์ฟเวอร์)
+const isImageValue = (key, value) => IMAGE_KEYS.includes(key) && typeof value === 'string' && value.trim().length > 0;
+
 export default function RequestDetail({ request, onBack, onEdit, onDelete }) {
-  return <section className="detail-page view active-view">
-    <div className="detail-header"><button className="detail-back" onClick={onBack}>←</button><div><p className="eyebrow">SERVICE REQUEST / DETAIL</p><h1>{request.ticket || request.ref || 'รายละเอียดงาน'}</h1><p className="subheading">รายละเอียดข้อมูลการแจ้งบริการ</p></div><div style={{ display: 'flex', gap: '8px' }}><button className="secondary-btn" type="button" onClick={() => onDelete && onDelete(request.id)}>ลบ</button><button className="primary-btn" onClick={() => onEdit(request)}>แก้ไขงาน</button></div></div>
-    <div className="detail-card"><div className="detail-status"><span className="status">{request.status || '-'}</span>{request.ref ? <span className="level p2">{request.ref}</span> : null}</div><div className="detail-grid">{fields.map(([key, label]) => { const value = request[key]; if (!value) return null; return <div className={`detail-field ${['description', 'action', 'result', 'notes', 'image', 'completedImage'].includes(key) ? 'detail-wide' : ''}`} key={key}><span>{label}</span>{['image', 'completedImage'].includes(key) && String(value).startsWith('data:image') ? <img src={value} alt={label} /> : <strong>{['receivedAt', 'appointment', 'appointmentEnd', 'completedAt'].includes(key) ? formatDate(value) : value}</strong>}</div>; })}</div></div>
-  </section>;
+  return (
+    <section className="detail-page view active-view">
+      <div className="detail-header">
+        <button className="detail-back" onClick={onBack}>←</button>
+        <div>
+          <p className="eyebrow">SERVICE REQUEST / DETAIL</p>
+          <h1>{request.ticket || request.ref || 'รายละเอียดงาน'}</h1>
+          <p className="subheading">รายละเอียดข้อมูลการแจ้งบริการ</p>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="secondary-btn" type="button" onClick={() => onDelete && onDelete(request.id)}>ลบ</button>
+          <button className="primary-btn" onClick={() => onEdit(request)}>แก้ไขงาน</button>
+        </div>
+      </div>
+
+      <div className="detail-card">
+        <div className="detail-status">
+          <span className="status">{request.status || '-'}</span>
+          {request.ref ? <span className="level p2">{request.ref}</span> : null}
+        </div>
+
+        {sections.map((section) => {
+          const visibleFields = section.fields.filter(([key]) => request[key]);
+          if (visibleFields.length === 0) return null;
+
+          return (
+            <div className="detail-section" key={section.title}>
+              <h3 className="detail-section-title">{section.title}</h3>
+              <div className="detail-grid">
+                {visibleFields.map(([key, label]) => {
+                  const value = request[key];
+                  return (
+                    <div className={`detail-field ${WIDE_KEYS.includes(key) ? 'detail-wide' : ''}`} key={key}>
+                      <span>{label}</span>
+                      {isImageValue(key, value) ? (
+                        <a href={value} target="_blank" rel="noreferrer">
+                          <img src={value} alt={label} />
+                        </a>
+                      ) : (
+                        <strong>{DATE_KEYS.includes(key) ? formatDate(value) : value}</strong>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
 }

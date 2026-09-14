@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse/sync';
 import 'dotenv/config';
-import { prisma } from './db.js';
+import { supabase } from './supabase.js';
 
 const filePath = path.resolve(process.cwd(), '../service-desk-2026-08-28 (1).csv');
 
@@ -13,7 +13,7 @@ const toDate = (value) => {
 
   const isoLike = text.includes('T') ? text : text.replace(' ', 'T');
   const date = new Date(isoLike);
-  return Number.isNaN(date.getTime()) ? null : date;
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 
 const normalizeRow = (row) => ({
@@ -60,16 +60,13 @@ const main = async () => {
 
     const payload = rows.map(normalizeRow);
 
-    const result = await prisma.request.createMany({
-      data: payload,
-    });
+    const { data, error } = await supabase.from('requests').insert(payload).select('id');
+    if (error) throw error;
 
-    console.log(`Imported ${result.count} records from CSV into SQLite.`);
+    console.log(`Imported ${data.length} records from CSV into Supabase.`);
   } catch (error) {
     console.error('CSV import failed:', error);
     process.exitCode = 1;
-  } finally {
-    await prisma.$disconnect();
   }
 };
 

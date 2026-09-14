@@ -1,0 +1,33 @@
+create extension if not exists pgcrypto;
+
+create table if not exists public.requests (
+  id text primary key default gen_random_uuid()::text,
+  customer text,
+  ref text,
+  source text,
+  "receivedAt" timestamptz,
+  ticket text,
+  location text,
+  site text,
+  contact text,
+  phone text,
+  description text,
+  image text,
+  ma text default 'N',
+  "jobType" text,
+  status text,
+  assignee text,
+  appointment timestamptz,
+  "appointmentEnd" timestamptz,
+  action text,
+  result text,
+  equipment text,
+  "completedImage" text,
+  "completedAt" timestamptz,
+  map text,
+  vehicle text,
+  notes text,
+  file text,
+  "createdAt" timestamptz not null default now(),
+  "updatedAt" timestamptz not null default now()
+);

@@ -13,11 +13,15 @@
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
     "@vitejs/plugin-react": "latest",
+    "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "react": "latest",
     "react-dom": "latest",
     "sweetalert2": "^11.26.25",
     "vite": "latest",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "supabase": "^2.117.0"
   }
 }

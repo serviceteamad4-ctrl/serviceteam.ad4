@@ -59,29 +59,25 @@ export const extractDataFromExcel = async (file) => {
   });
 };
 
+const DEFAULT_DROPDOWN_DATA = {
+  customer: [],
+  location: [],
+  assignee: [],
+  source: ['ไลน์', 'โทรศัพท์', 'อีเมล', 'เว็บไซต์'],
+  jobType: ['แนะนำ', 'แก้ไขหน้างาน', 'รีโมท', 'ประเมินราคา', 'เทรน'],
+  status: ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รออะไหล่', 'เรียบร้อยปกติ', 'รอเสนอราคา'],
+  equipment: ['จอ LED', 'Kiosk', 'กล่องเล่นสื่อ', 'อื่นๆ'],
+  // ค่าที่ผู้ใช้ลบทิ้งจากดรอปดาวน์ (รวมถึงค่าที่ดึงมาจากประวัติงานจริง) จะถูกจำไว้ที่นี่
+  // เพื่อไม่ให้กลับมาโผล่อีกแม้จะยังมีอยู่ในข้อมูลเก่า
+  hidden: {},
+};
+
 export const getStoredDropdownData = () => {
   try {
     const stored = localStorage.getItem('dropdown-data');
-    const defaults = {
-      customer: [],
-      location: [],
-      assignee: [],
-      source: ['ไลน์', 'โทรศัพท์', 'อีเมล', 'เว็บไซต์'],
-      jobType: ['แนะนำ', 'แก้ไขหน้างาน', 'รีโมท', 'ประเมินราคา'],
-      status: ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'เรียบร้อยปกติ', 'รอเสนอราคา'],
-      equipment: ['จอ LED', 'Kiosk', 'กล่องเล่นสื่อ', 'อื่นๆ'],
-    };
-    return stored ? { ...defaults, ...JSON.parse(stored) } : defaults;
+    return stored ? { ...DEFAULT_DROPDOWN_DATA, ...JSON.parse(stored) } : { ...DEFAULT_DROPDOWN_DATA };
   } catch {
-    return {
-      customer: [],
-      location: [],
-      assignee: [],
-      source: ['ไลน์', 'โทรศัพท์', 'อีเมล', 'เว็บไซต์'],
-      jobType: ['แนะนำ', 'แก้ไขหน้างาน', 'รีโมท', 'ประเมินราคา'],
-      status: ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'เรียบร้อยปกติ', 'รอเสนอราคา'],
-      equipment: ['จอ LED', 'Kiosk', 'กล่องเล่นสื่อ', 'อื่นๆ'],
-    };
+    return { ...DEFAULT_DROPDOWN_DATA };
   }
 };
 
@@ -95,14 +91,24 @@ export const addDropdownValue = (field, value) => {
   if (newValue && !data[field]?.includes(newValue)) {
     if (!data[field]) data[field] = [];
     data[field].push(newValue);
+    // เพิ่มค่าใหม่แล้ว ถ้าเคยถูกซ่อนไว้ก่อนหน้านี้ก็ให้เลิกซ่อน
+    if (data.hidden?.[field]) {
+      data.hidden[field] = data.hidden[field].filter((item) => item !== newValue);
+    }
     saveDropdownData(data);
   }
 };
 
+// ลบตัวเลือกออกจากดรอปดาวน์ ใช้ได้ทั้งค่าที่พิมพ์เพิ่มเองและค่าที่ดึงมาจากประวัติงานจริง
 export const removeDropdownValue = (field, value) => {
   const data = getStoredDropdownData();
   if (data[field]) {
     data[field] = data[field].filter((item) => item !== value);
-    saveDropdownData(data);
   }
+  if (!data.hidden) data.hidden = {};
+  if (!data.hidden[field]) data.hidden[field] = [];
+  if (!data.hidden[field].includes(value)) {
+    data.hidden[field].push(value);
+  }
+  saveDropdownData(data);
 };

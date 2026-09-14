@@ -6,9 +6,9 @@ import RequestDetail from './RequestDetail.jsx';
 import FilterPanel from './FilterPanel.jsx';
 import EditableDropdown from './EditableDropdown.jsx';
 import { getStoredDropdownData, addDropdownValue, removeDropdownValue } from './excelDataManager.js';
+import { dateFields as filterDateFields } from './FilterPanel.jsx';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4001';
-const STORAGE_KEY = 'service-desk-requests-v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 const emptyRequest = {
   ref: '',
@@ -72,15 +72,19 @@ const buildTrackingPrefix = (customer = '') => {
   return cleaned || 'REQ';
 };
 
+// เลขวิ่งท้ายรันต่อเนื่องกันทั้งระบบ (ไม่ใช่แยกนับใหม่ต่อลูกค้าแต่ละราย) ให้ตรงกับข้อมูลเก่าที่มีอยู่จริง
+// เช่น RIC000010 -> VES000011 -> WOR000012 แม้เปลี่ยนลูกค้าตัวเลขก็ยังนับต่อ ไม่ย้อนกลับไป 000001
+// ไม่นับเลขที่ไม่มีตัวอักษรนำหน้า (เช่น "100004725") เพราะเป็นข้อมูลเพี้ยนที่หลุดเข้ามาก่อนหน้านี้ ไม่ใช่เลขรันจริง
 const generateTrackingNumber = (customer, existingRequests = []) => {
   const prefix = buildTrackingPrefix(customer);
-  const matches = existingRequests
+  const numbers = existingRequests
     .map((item) => item.ticket)
-    .filter((value) => typeof value === 'string' && value.startsWith(prefix))
-    .map((value) => Number.parseInt(value.slice(prefix.length), 10))
-    .filter((value) => Number.isFinite(value));
+    .filter((value) => typeof value === 'string')
+    .map((value) => value.match(/^\D+(\d{1,6})$/))
+    .filter(Boolean)
+    .map((match) => Number.parseInt(match[1], 10));
 
-  const next = matches.length ? Math.max(...matches) + 1 : 1;
+  const next = numbers.length ? Math.max(...numbers) + 1 : 1;
   return `${prefix}${String(next).padStart(6, '0')}`;
 };
 
@@ -276,7 +280,10 @@ function App() {
 
   const filtered = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
-    const advancedEntries = Object.entries(advancedFilters).filter(([, value]) => (Array.isArray(value) ? value.length : value));
+    const advancedEntries = Object.entries(advancedFilters).filter(([key, value]) => {
+      if (filterDateFields.includes(key)) return value && (value.from || value.to);
+      return Array.isArray(value) ? value.length : value;
+    });
     return requests
       .filter((item) => {
         if (q) {
@@ -294,6 +301,12 @@ function App() {
         if (status !== 'ทั้งหมด' && item.status !== status) return false;
         if (selectedMonth && item.receivedAt && monthKeyFromValue(item.receivedAt) !== selectedMonth) return false;
         for (const [key, value] of advancedEntries) {
+          if (filterDateFields.includes(key)) {
+            const itemDate = item[key] ? String(item[key]).slice(0, 10) : '';
+            if (value.from && (!itemDate || itemDate < value.from)) return false;
+            if (value.to && (!itemDate || itemDate > value.to)) return false;
+            continue;
+          }
           const selectedValues = Array.isArray(value) ? value : [value];
           if (!selectedValues.includes(String(item[key] || ''))) return false;
         }
@@ -343,7 +356,6 @@ function App() {
         : [...requests, saved];
 
       setRequests(updated);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       return updated;
     } catch (error) {
       throw error;
@@ -408,7 +420,6 @@ function App() {
 
       const next = requests.filter((item) => item.id !== requestId);
       setRequests(next);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       setSelectedRequest(null);
       setEditing(null);
       await Swal.fire({
@@ -491,6 +502,10 @@ function App() {
               requests={requests}
               onClose={() => setEditing(null)}
               onSave={saveRequest}
+              onDelete={async () => {
+                await handleDeleteRequest(editing.id);
+                setEditing(null);
+              }}
             />
           ) : selectedRequest ? (
             <RequestDetail
@@ -501,6 +516,7 @@ function App() {
             />
           ) : (
             <RequestsView
+              onView={(request) => setSelectedRequest(request)}
               requests={requests}
               filtered={filtered}
               pageItems={paginatedFiltered}
@@ -528,7 +544,7 @@ function App() {
             />
           )
         ) : (
-          <Dashboard requests={requests} onExport={() => printPdf('Service Desk - Dashboard รายวัน', requests)} />
+          <Dashboard requests={requests} />
         )}
       </main>
 
@@ -546,7 +562,7 @@ function App() {
   );
 }
 
-function RequestsView({ requests, filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, onAdd, onEdit, onExport, onExportPdf, isLoading, error }) {
+function RequestsView({ requests, filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error }) {
   const monthInputRef = useRef(null);
   const selectedMonthRequests = useMemo(
     () => requests.filter((r) => !selectedMonth || !r.receivedAt || monthKeyFromValue(r.receivedAt) === selectedMonth),
@@ -554,7 +570,7 @@ function RequestsView({ requests, filtered, pageItems, query, setQuery, status, 
   );
   const active = useMemo(() => selectedMonthRequests.filter((r) => r.status !== 'เรียบร้อยปกติ').length, [selectedMonthRequests]);
   const done = selectedMonthRequests.length - active;
-  const statusOrder = ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'เรียบร้อยปกติ', 'รอเสนอราคา'];
+  const statusOrder = ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รออะไหล่', 'เรียบร้อยปกติ', 'รอเสนอราคา'];
   const groupedStatuses = useMemo(() => (status === 'ทั้งหมด' ? statusOrder : [status])
     .map((groupStatus) => ({
       status: groupStatus,
@@ -590,10 +606,11 @@ function RequestsView({ requests, filtered, pageItems, query, setQuery, status, 
         </label>
         <select value={status} onChange={(event) => setStatus(event.target.value)} style={{ minWidth: '170px', flex: '0 0 170px', height: '42px', borderRadius: '14px', border: '1px solid #dfe6e4', padding: '0 12px', background: '#fff', color: '#18242b', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>
           <option>ทั้งหมด</option>
-          <option>งานที่ยังเปิดอยู่</option>
+          <option>รับเรื่อง</option>
           <option>รอดำเนินการ</option>
           <option>กำลังดำเนินการ</option>
           <option>รอลูกค้าสรุปงาน</option>
+          <option>รออะไหล่</option>
           <option>เรียบร้อยปกติ</option>
           <option>รอเสนอราคา</option>
         </select>
@@ -622,11 +639,11 @@ function RequestsView({ requests, filtered, pageItems, query, setQuery, status, 
                   ))}
                   {group.items.map((request) => (
                     <React.Fragment key={request.id}>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => onEdit(request)}>{request.customer || '—'}</div>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => onEdit(request)}>{request.ref || '-'}</div>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => onEdit(request)}>{request.ticket || '-'}</div>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => onEdit(request)}>{request.location || '—'}</div>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => onEdit(request)}>{request.assignee || '—'}</div>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }} onClick={() => onView(request)}>{request.customer || '—'}</div>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }} onClick={() => onView(request)}>{request.ref || '-'}</div>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }} onClick={() => onView(request)}>{request.ticket || '-'}</div>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }} onClick={() => onView(request)}>{request.location || '—'}</div>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }} onClick={() => onView(request)}>{request.assignee || '—'}</div>
                       <div style={{ padding: '8px 8px', borderBottom: '1px solid #eef1ef', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <button type="button" className="secondary-btn" onClick={(event) => { event.stopPropagation(); onEdit(request); }}>แก้ไข</button>
                       </div>
@@ -670,7 +687,22 @@ function Metric({ label, value, className = '', style = {} }) {
   );
 }
 
-function RequestEditor({ request, requests = [], onClose, onSave }) {
+// ดึงค่าที่เคยกรอกจริงจากประวัติงาน (requests) มาเป็นตัวเลือกในดรอปดาวน์
+// เพื่อให้ลูกค้า/สถานที่/ผู้ดำเนินการ ที่เคยมีอยู่จริงเลือกซ้ำได้ ไม่ต้องพิมพ์ใหม่ทุกครั้ง
+const uniqueSorted = (values) => Array.from(new Set(values.map((v) => String(v || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'th'));
+
+const deriveOptionsFromRequests = (requests) => ({
+  customer: uniqueSorted(requests.map((r) => r.customer)),
+  location: uniqueSorted(requests.map((r) => r.location)),
+  assignee: uniqueSorted(requests.map((r) => r.assignee)),
+});
+
+const mergeOptions = (...lists) => uniqueSorted(lists.flat());
+
+// เอาค่าที่ผู้ใช้กดลบทิ้งไว้ (hidden) ออกจากรายการ ไม่ว่าค่านั้นจะมาจากที่พิมพ์เพิ่มเองหรือดึงจากประวัติงานจริง
+const excludeHidden = (options, hiddenList = []) => options.filter((opt) => !hiddenList.includes(opt));
+
+function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
   const [form, setForm] = useState(() => ({
     ...emptyRequest,
     ...normalizeRequest(request),
@@ -679,6 +711,8 @@ function RequestEditor({ request, requests = [], onClose, onSave }) {
   }));
   const [dropdownData, setDropdownData] = useState(getStoredDropdownData());
   const [isSaving, setIsSaving] = useState(false);
+
+  const historyOptions = useMemo(() => deriveOptionsFromRequests(requests), [requests]);
 
   const update = (event) => {
     const nextForm = { ...form, [event.target.name]: event.target.value };
@@ -711,6 +745,17 @@ function RequestEditor({ request, requests = [], onClose, onSave }) {
           <button type="button" className="icon-btn" onClick={onClose}>×</button>
           <h2>{request.id ? 'แก้ไขงาน' : 'เพิ่มงานใหม่'}</h2>
           <div>
+            {request.id && (
+              <button
+                type="button"
+                className="icon-btn"
+                title="ลบงานนี้"
+                onClick={onDelete}
+                style={{ color: '#dc5b56', marginRight: '8px' }}
+              >
+                🗑️
+              </button>
+            )}
             <button type="button" className="secondary-btn" onClick={onClose}>ยกเลิก</button>
             <button type="submit" form="serviceForm" className="primary-btn" disabled={isSaving}>
               {isSaving ? 'กำลังบันทึก...' : 'บันทึก'}
@@ -749,7 +794,7 @@ function RequestEditor({ request, requests = [], onClose, onSave }) {
               name="customer"
               label="ลูกค้า"
               value={form.customer || ''}
-              options={dropdownData.customer || []}
+              options={excludeHidden(mergeOptions(dropdownData.customer || [], historyOptions.customer), dropdownData.hidden?.customer)}
               onChange={update}
               onAddOption={(value) => {
                 handleAddDropdownValue('customer', value);
@@ -762,7 +807,7 @@ function RequestEditor({ request, requests = [], onClose, onSave }) {
               name="location"
               label="สถานที่/สาขา"
               value={form.location || ''}
-              options={dropdownData.location || []}
+              options={excludeHidden(mergeOptions(dropdownData.location || [], historyOptions.location), dropdownData.hidden?.location)}
               onChange={update}
               onAddOption={(value) => {
                 handleAddDropdownValue('location', value);
@@ -789,7 +834,7 @@ function RequestEditor({ request, requests = [], onClose, onSave }) {
               name="jobType"
               label="ลักษณะงาน"
               value={form.jobType || ''}
-              options={dropdownData.jobType || ['แนะนำ', 'แก้ไขหน้างาน', 'รีโมท', 'ประเมินราคา']}
+              options={dropdownData.jobType || ['แนะนำ', 'แก้ไขหน้างาน', 'รีโมท', 'ประเมินราคา', 'เทรน']}
               onChange={update}
               onAddOption={(value) => {
                 handleAddDropdownValue('jobType', value);
@@ -802,7 +847,7 @@ function RequestEditor({ request, requests = [], onClose, onSave }) {
               name="status"
               label="สถานะงาน"
               value={form.status || ''}
-              options={dropdownData.status || ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'เรียบร้อยปกติ', 'รอเสนอราคา']}
+              options={dropdownData.status || ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รออะไหล่', 'เรียบร้อยปกติ', 'รอเสนอราคา']}
               onChange={update}
               onAddOption={(value) => {
                 handleAddDropdownValue('status', value);
@@ -815,7 +860,7 @@ function RequestEditor({ request, requests = [], onClose, onSave }) {
               name="assignee"
               label="ผู้ดำเนินการ"
               value={form.assignee || ''}
-              options={dropdownData.assignee || []}
+              options={excludeHidden(mergeOptions(dropdownData.assignee || [], historyOptions.assignee), dropdownData.hidden?.assignee)}
               onChange={update}
               onAddOption={(value) => {
                 handleAddDropdownValue('assignee', value);
@@ -823,6 +868,12 @@ function RequestEditor({ request, requests = [], onClose, onSave }) {
               }}
               onRemoveOption={(value) => handleRemoveDropdownValue('assignee', value)}
             />
+            {form.status === 'กำลังดำเนินการ' && (
+              <>
+                {text('appointment', 'วันที่นัดหมาย เวลาเริ่มต้น', false, 'datetime-local')}
+                {text('appointmentEnd', 'วันที่นัดหมาย เวลาสิ้นสุด', false, 'datetime-local')}
+              </>
+            )}
             <EditableDropdown
               name="equipment"
               label="เกี่ยวกับอุปกรณ์"

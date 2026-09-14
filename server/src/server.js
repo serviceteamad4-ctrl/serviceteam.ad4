@@ -1,23 +1,32 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { prisma } from './db.js';
-import { uploadImageToStorage, deleteImageFromStorage } from './supabase.js';
+import { supabase } from './supabase.js';
+import { storeImage, removeImage, UPLOAD_DIR } from './storage.js';
 
 const app = express();
 const PORT = Number(process.env.PORT || 4001);
 
+const REQUEST_COLUMNS = [
+  'id', 'customer', 'ref', 'source', 'receivedAt', 'ticket', 'location', 'site',
+  'contact', 'phone', 'description', 'image', 'ma', 'jobType', 'status', 'assignee',
+  'appointment', 'appointmentEnd', 'action', 'result', 'equipment', 'completedImage',
+  'completedAt', 'map', 'vehicle', 'notes', 'file', 'createdAt', 'updatedAt',
+];
+
 app.use(cors({
   origin: (origin, callback) => {
     const isLocalFrontend = !origin
-      || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+      || /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin);
     const isConfiguredFrontend = origin && origin === process.env.FRONTEND_URL;
 
     callback(null, isLocalFrontend || isConfiguredFrontend);
   },
   credentials: true,
 }));
-app.use(express.json({ limit: '10mb' }));
+// รูป 10 MB เมื่อเข้ารหัส base64 จะโตขึ้น ~33% จึงต้องเผื่อ limit ให้มากกว่า
+app.use(express.json({ limit: '25mb' }));
+app.use('/api/uploads', express.static(UPLOAD_DIR, { maxAge: '1y' }));
 
 app.get('/', (_req, res) => {
   res.json({
@@ -29,9 +38,13 @@ app.get('/', (_req, res) => {
 
 app.get('/api/health', async (_req, res) => {
   try {
-    await prisma.$queryRaw`SELECT 1`;
-    const { _count: requestCount } = await prisma.request.aggregate({ _count: true });
-    res.json({ ok: true, message: 'Service desk API is healthy', requestCount });
+    const { count, error } = await supabase
+      .from('requests')
+      .select('*', { count: 'exact', head: true });
+
+    if (error) throw error;
+
+    res.json({ ok: true, message: 'Service desk API is healthy', requestCount: count });
   } catch (error) {
     res.status(500).json({ ok: false, message: 'Database unavailable', error: String(error) });
   }
@@ -39,41 +52,24 @@ app.get('/api/health', async (_req, res) => {
 
 app.get('/api/requests', async (_req, res) => {
   try {
-    const requests = await prisma.request.findMany({
-      select: {
-        id: true,
-        customer: true,
-        ref: true,
-        source: true,
-        receivedAt: true,
-        ticket: true,
-        location: true,
-        site: true,
-        contact: true,
-        phone: true,
-        description: true,
-        image: true,
-        ma: true,
-        jobType: true,
-        status: true,
-        assignee: true,
-        appointment: true,
-        appointmentEnd: true,
-        action: true,
-        result: true,
-        equipment: true,
-        completedImage: true,
-        completedAt: true,
-        map: true,
-        vehicle: true,
-        notes: true,
-        file: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: { receivedAt: 'desc' },
-    });
-    res.json(requests);
+    const PAGE_SIZE = 1000;
+    const all = [];
+    let from = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('requests')
+        .select(REQUEST_COLUMNS.join(','))
+        .order('receivedAt', { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+
+      if (error) throw error;
+      all.push(...data);
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+
+    res.json(all);
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch requests', error: String(error) });
   }
@@ -81,15 +77,18 @@ app.get('/api/requests', async (_req, res) => {
 
 app.get('/api/requests/:id', async (req, res) => {
   try {
-    const request = await prisma.request.findUnique({
-      where: { id: req.params.id },
-    });
+    const { data, error } = await supabase
+      .from('requests')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle();
 
-    if (!request) {
+    if (error) throw error;
+    if (!data) {
       return res.status(404).json({ message: 'Request not found' });
     }
 
-    res.json(request);
+    res.json(data);
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch request', error: String(error) });
   }
@@ -98,12 +97,13 @@ app.get('/api/requests/:id', async (req, res) => {
 app.post('/api/requests', async (req, res) => {
   try {
     const body = req.body || {};
-    const request = await prisma.request.create({
-      data: {
+    const { data, error } = await supabase
+      .from('requests')
+      .insert({
         customer: body.customer || '',
         ref: body.ref || null,
         source: body.source || null,
-        receivedAt: body.receivedAt ? new Date(body.receivedAt) : new Date(),
+        receivedAt: body.receivedAt ? new Date(body.receivedAt).toISOString() : new Date().toISOString(),
         ticket: body.ticket || null,
         location: body.location || null,
         site: body.site || null,
@@ -115,21 +115,24 @@ app.post('/api/requests', async (req, res) => {
         jobType: body.jobType || null,
         status: body.status || null,
         assignee: body.assignee || null,
-        appointment: body.appointment ? new Date(body.appointment) : null,
-        appointmentEnd: body.appointmentEnd ? new Date(body.appointmentEnd) : null,
+        appointment: body.appointment ? new Date(body.appointment).toISOString() : null,
+        appointmentEnd: body.appointmentEnd ? new Date(body.appointmentEnd).toISOString() : null,
         action: body.action || null,
         result: body.result || null,
         equipment: body.equipment || null,
         completedImage: body.completedImage || null,
-        completedAt: body.completedAt ? new Date(body.completedAt) : null,
+        completedAt: body.completedAt ? new Date(body.completedAt).toISOString() : null,
         map: body.map || null,
         vehicle: body.vehicle || null,
         notes: body.notes || null,
         file: body.file || null,
-      },
-    });
+      })
+      .select()
+      .single();
 
-    res.status(201).json(request);
+    if (error) throw error;
+
+    res.status(201).json(data);
   } catch (error) {
     res.status(500).json({ message: 'Failed to create request', error: String(error) });
   }
@@ -138,39 +141,48 @@ app.post('/api/requests', async (req, res) => {
 app.put('/api/requests/:id', async (req, res) => {
   try {
     const body = req.body || {};
-    const request = await prisma.request.update({
-      where: { id: req.params.id },
-      data: {
-        customer: body.customer,
-        ref: body.ref,
-        source: body.source,
-        receivedAt: body.receivedAt ? new Date(body.receivedAt) : undefined,
-        ticket: body.ticket,
-        location: body.location,
-        site: body.site,
-        contact: body.contact,
-        phone: body.phone,
-        description: body.description,
-        image: body.image,
-        ma: body.ma,
-        jobType: body.jobType,
-        status: body.status,
-        assignee: body.assignee,
-        appointment: body.appointment ? new Date(body.appointment) : undefined,
-        appointmentEnd: body.appointmentEnd ? new Date(body.appointmentEnd) : undefined,
-        action: body.action,
-        result: body.result,
-        equipment: body.equipment,
-        completedImage: body.completedImage,
-        completedAt: body.completedAt ? new Date(body.completedAt) : undefined,
-        map: body.map,
-        vehicle: body.vehicle,
-        notes: body.notes,
-        file: body.file,
-      },
-    });
+    const updates = {};
+    const setIfDefined = (key, value) => {
+      if (value !== undefined) updates[key] = value;
+    };
 
-    res.json(request);
+    setIfDefined('customer', body.customer);
+    setIfDefined('ref', body.ref);
+    setIfDefined('source', body.source);
+    setIfDefined('receivedAt', body.receivedAt ? new Date(body.receivedAt).toISOString() : undefined);
+    setIfDefined('ticket', body.ticket);
+    setIfDefined('location', body.location);
+    setIfDefined('site', body.site);
+    setIfDefined('contact', body.contact);
+    setIfDefined('phone', body.phone);
+    setIfDefined('description', body.description);
+    setIfDefined('image', body.image);
+    setIfDefined('ma', body.ma);
+    setIfDefined('jobType', body.jobType);
+    setIfDefined('status', body.status);
+    setIfDefined('assignee', body.assignee);
+    setIfDefined('appointment', body.appointment ? new Date(body.appointment).toISOString() : undefined);
+    setIfDefined('appointmentEnd', body.appointmentEnd ? new Date(body.appointmentEnd).toISOString() : undefined);
+    setIfDefined('action', body.action);
+    setIfDefined('result', body.result);
+    setIfDefined('equipment', body.equipment);
+    setIfDefined('completedImage', body.completedImage);
+    setIfDefined('completedAt', body.completedAt ? new Date(body.completedAt).toISOString() : undefined);
+    setIfDefined('map', body.map);
+    setIfDefined('vehicle', body.vehicle);
+    setIfDefined('notes', body.notes);
+    setIfDefined('file', body.file);
+
+    const { data, error } = await supabase
+      .from('requests')
+      .update(updates)
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json(data);
   } catch (error) {
     res.status(500).json({ message: 'Failed to update request', error: String(error) });
   }
@@ -178,19 +190,28 @@ app.put('/api/requests/:id', async (req, res) => {
 
 app.delete('/api/requests/:id', async (req, res) => {
   try {
-    const request = await prisma.request.findUnique({
-      where: { id: req.params.id },
-      select: { image: true, completedImage: true },
-    });
+    const { data: existing, error: fetchError } = await supabase
+      .from('requests')
+      .select('image, completedImage')
+      .eq('id', req.params.id)
+      .maybeSingle();
 
-    if (request?.image) {
-      await deleteImageFromStorage('service-desk-images', request.image);
+    if (fetchError) throw fetchError;
+
+    if (existing?.image) {
+      await removeImage('service-desk-images', existing.image);
     }
-    if (request?.completedImage) {
-      await deleteImageFromStorage('service-desk-images', request.completedImage);
+    if (existing?.completedImage) {
+      await removeImage('service-desk-images', existing.completedImage);
     }
 
-    await prisma.request.delete({ where: { id: req.params.id } });
+    const { error } = await supabase
+      .from('requests')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
+
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete request', error: String(error) });
@@ -206,10 +227,16 @@ app.post('/api/upload', async (req, res) => {
     }
 
     const buffer = Buffer.from(file, 'base64');
-    const publicUrl = await uploadImageToStorage(bucket, buffer, fileName);
+
+    if (!buffer.length) {
+      return res.status(400).json({ message: 'File is empty or not valid base64' });
+    }
+
+    const publicUrl = await storeImage(bucket, buffer, fileName);
 
     res.json({ url: publicUrl });
   } catch (error) {
+    console.error('Upload failed:', error);
     res.status(500).json({ message: 'Failed to upload image', error: String(error) });
   }
 });

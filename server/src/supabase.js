@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
 
 if (!supabaseUrl || !supabaseKey) {
   console.warn('Supabase credentials are not configured');
@@ -9,26 +9,16 @@ if (!supabaseUrl || !supabaseKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-export const uploadImageToStorage = async (bucket, file, fileName) => {
+export const uploadImageToStorage = async (bucket, file, fileName, contentType) => {
   if (!file) return null;
 
   try {
-    // Check if bucket exists, if not create it
-    const { data: buckets } = await supabase.storage.listBuckets();
-    const bucketExists = buckets?.some((b) => b.name === bucket);
-
-    if (!bucketExists) {
-      console.log(`Creating bucket: ${bucket}`);
-      await supabase.storage.createBucket(bucket, {
-        public: true,
-      });
-    }
-
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from(bucket)
       .upload(fileName, file, {
         cacheControl: '3600',
         upsert: false,
+        contentType: contentType || 'application/octet-stream',
       });
 
     if (error) {
