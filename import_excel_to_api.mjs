@@ -54,13 +54,17 @@ const normalizeYear = (date) => {
   }
   return date.toISOString();
 };
+// สเปรดชีตบันทึกเวลาเป็นเวลาไทย (UTC+7) แต่ตัวเลข serial ของ Excel ไม่มีข้อมูล timezone ติดมาด้วย
+// ต้องลบ 7 ชั่วโมงหลังแปลงเป็น UTC แบบตรงตัวเลข ไม่งั้นเวลาที่บันทึกจะเพี้ยนไป 7 ชั่วโมง
+const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
 const dateValue = (value) => {
   if (value == null || value === '') return null;
   if (value instanceof Date) return normalizeYear(new Date(value));
   if (typeof value === 'number') {
     const parsed = XLSX.SSF.parse_date_code(value);
     if (!parsed) return null;
-    return normalizeYear(new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d, parsed.H || 0, parsed.M || 0, parsed.S || 0)));
+    const naiveUtcMs = Date.UTC(parsed.y, parsed.m - 1, parsed.d, parsed.H || 0, parsed.M || 0, parsed.S || 0);
+    return normalizeYear(new Date(naiveUtcMs - BANGKOK_OFFSET_MS));
   }
   const text = String(value).trim();
   const parsed = new Date(text);

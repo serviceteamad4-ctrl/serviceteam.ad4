@@ -94,6 +94,16 @@ export default function Dashboard({ requests }) {
         ['เทรน', completedGroups['งานเทรน']],
       ],
     },
+    {
+      number: '3',
+      label: 'นัดหมายงาน รับเรื่อง',
+      value: dayRequests.filter((item) => item.appointment).length,
+      tone: 'yellow',
+      children: [
+        ['สถานะงาน รับเรื่อง', dayRequests.filter((item) => item.status === 'รับเรื่อง').length],
+        ['ยังไม่ได้จัดแพลนคิวงาน', dayRequests.filter((item) => !item.appointment).length],
+      ],
+    },
     ...allRows,
   ];
 
