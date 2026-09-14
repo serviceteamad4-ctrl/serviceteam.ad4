@@ -8,7 +8,8 @@ import EditableDropdown from './EditableDropdown.jsx';
 import { getStoredDropdownData, addDropdownValue, removeDropdownValue } from './excelDataManager.js';
 import { dateFields as filterDateFields } from './FilterPanel.jsx';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+// ตัด "/" ท้ายออก กัน URL ซ้อนกัน (เช่น "https://api.example.com/" + "/api/requests" จะกลายเป็น "...com//api/requests" ซึ่ง 404)
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
 const emptyRequest = {
   ref: '',
