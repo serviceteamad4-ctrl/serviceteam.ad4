@@ -589,12 +589,19 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
   const monthInputRef = useRef(null);
   const active = useMemo(() => filtered.filter((r) => !['เรียบร้อยปกติ', 'ยกเลิก'].includes(r.status)).length, [filtered]);
   const done = useMemo(() => filtered.filter((r) => r.status === 'เรียบร้อยปกติ').length, [filtered]);
-  const groupedStatuses = useMemo(() => (status === 'ทั้งหมด' ? STATUS_ORDER : [status])
-    .map((groupStatus) => ({
-      status: groupStatus,
-      items: pageItems.filter((request) => request.status === groupStatus),
-    }))
-    .filter((group) => group.items.length > 0), [pageItems, status]);
+  const groupedStatuses = useMemo(() => {
+    const statuses = status === 'ทั้งหมด'
+      ? Array.from(new Set([...STATUS_ORDER, ...pageItems.map((request) => request.status)])).sort(
+        (a, b) => statusRank(a) - statusRank(b),
+      )
+      : [status];
+    return statuses
+      .map((groupStatus) => ({
+        status: groupStatus,
+        items: pageItems.filter((request) => request.status === groupStatus),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [pageItems, status]);
 
   return (
     <section className="view active-view" style={{ paddingTop: '16px' }}>

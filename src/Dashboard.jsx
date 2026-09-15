@@ -62,7 +62,7 @@ export default function Dashboard({ requests }) {
 
   const allRequests = requests;
   const allRows = [
-    { number: '4', label: 'รอคิวช่าง', value: allRequests.filter((item) => item.status === 'รอคิวช่าง').length, tone: 'green', children: [] },
+    { number: '4', label: 'รอจัดคิวช่าง', value: allRequests.filter((item) => ['รอคิวช่าง', 'รอจัดคิวช่าง'].includes(item.status)).length, tone: 'green', children: [] },
     { number: '5', label: 'กำลังดำเนินการ', value: allRequests.filter((item) => item.status === 'กำลังดำเนินการ').length, tone: 'blue', children: [] },
     { number: '6', label: 'รอลูกค้าสรุป', value: allRequests.filter((item) => item.status === 'รอลูกค้าสรุปงาน').length, tone: 'amber', children: [] },
     { number: '7', label: 'รอส่งตามวันที่', value: allRequests.filter((item) => ['รอส่งสื่อ', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด'].includes(item.status)).length, tone: 'purple', children: [] },
