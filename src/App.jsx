@@ -6,7 +6,7 @@ import RequestDetail from './RequestDetail.jsx';
 import FilterPanel from './FilterPanel.jsx';
 import EditableDropdown from './EditableDropdown.jsx';
 import { getStoredDropdownData, addDropdownValue, removeDropdownValue } from './excelDataManager.js';
-import { dateFields as filterDateFields } from './FilterPanel.jsx';
+import { dateFields as filterDateFields, filterFieldLabels } from './FilterPanel.jsx';
 import { isViewableImageUrl } from './requestUtils.js';
 
 // ตัด "/" ท้ายออก กัน URL ซ้อนกัน (เช่น "https://api.example.com/" + "/api/requests" จะกลายเป็น "...com//api/requests" ซึ่ง 404)
@@ -591,8 +591,34 @@ function App() {
   );
 }
 
-function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error }) {
+const formatChipDate = (value) => {
+  if (!value) return '…';
+  const [y, m, d] = value.split('-');
+  return d && m && y ? `${d}/${m}/${y}` : value;
+};
+
+function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, advancedFilters, setAdvancedFilters, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error }) {
   const monthInputRef = useRef(null);
+  const activeFilterChips = useMemo(() => Object.entries(advancedFilters || {}).reduce((chips, [key, value]) => {
+    const label = filterFieldLabels[key] || key;
+    if (filterDateFields.includes(key)) {
+      if (value && (value.from || value.to)) {
+        chips.push({ key, text: `${label}: ${formatChipDate(value.from)} – ${formatChipDate(value.to)}` });
+      }
+      return chips;
+    }
+    const values = Array.isArray(value) ? value : value ? [value] : [];
+    if (values.length) {
+      const preview = values.length > 2 ? `${values.slice(0, 2).join(', ')} +${values.length - 2}` : values.join(', ');
+      chips.push({ key, text: `${label}: ${preview}` });
+    }
+    return chips;
+  }, []), [advancedFilters]);
+  const removeFilterChip = (key) => {
+    const next = { ...advancedFilters };
+    delete next[key];
+    setAdvancedFilters(next);
+  };
   const active = useMemo(() => filtered.filter((r) => !['เรียบร้อยปกติ', 'ยกเลิก'].includes(r.status)).length, [filtered]);
   const done = useMemo(() => filtered.filter((r) => r.status === 'เรียบร้อยปกติ').length, [filtered]);
   const groupedStatuses = useMemo(() => {
@@ -649,6 +675,18 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
         <button className="secondary-btn" onClick={onExport} style={{ borderRadius: '12px', height: '42px', padding: '0 14px', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>ดาวน์โหลด CSV</button>
         <button className="secondary-btn" onClick={onExportPdf} style={{ borderRadius: '12px', height: '42px', padding: '0 14px', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>ส่งออก PDF</button>
       </div>
+
+      {activeFilterChips.length > 0 && (
+        <div className="filter-chip-row">
+          {activeFilterChips.map(({ key, text }) => (
+            <span className="filter-chip" key={key}>
+              <span>{text}</span>
+              <button type="button" onClick={() => removeFilterChip(key)} aria-label={`ลบตัวกรอง ${filterFieldLabels[key] || key}`}>×</button>
+            </span>
+          ))}
+          <button type="button" className="filter-chip-clear" onClick={() => setAdvancedFilters({})}>ล้างทั้งหมด</button>
+        </div>
+      )}
 
       {isLoading && <div className="empty-state">กำลังโหลดข้อมูล...</div>}
       {!isLoading && error && <div className="empty-state error">{error}</div>}

@@ -30,6 +30,7 @@ const advancedFilterFields = [
 
 const filterFields = [...primaryFilterFields, ...advancedFilterFields];
 
+export const filterFieldLabels = Object.fromEntries(filterFields);
 export const dateFields = ['receivedAt', 'appointment', 'appointmentEnd', 'completedAt'];
 const selectOnlyFields = ['ref'];
 const dropdownFields = ['status', 'source', 'jobType', 'equipment'];
