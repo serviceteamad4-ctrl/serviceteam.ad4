@@ -587,8 +587,8 @@ function App() {
 
 function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error }) {
   const monthInputRef = useRef(null);
-  const active = useMemo(() => filtered.filter((r) => r.status !== 'เรียบร้อยปกติ').length, [filtered]);
-  const done = filtered.length - active;
+  const active = useMemo(() => filtered.filter((r) => !['เรียบร้อยปกติ', 'ยกเลิก'].includes(r.status)).length, [filtered]);
+  const done = useMemo(() => filtered.filter((r) => r.status === 'เรียบร้อยปกติ').length, [filtered]);
   const groupedStatuses = useMemo(() => (status === 'ทั้งหมด' ? STATUS_ORDER : [status])
     .map((groupStatus) => ({
       status: groupStatus,
