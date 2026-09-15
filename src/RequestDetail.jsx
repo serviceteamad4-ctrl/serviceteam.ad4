@@ -1,4 +1,4 @@
-import { formatDate } from './requestUtils.js';
+import { formatDate, isViewableImageUrl } from './requestUtils.js';
 
 // จัดกลุ่มฟิลด์เป็นหมวดหมู่ให้อ่านง่ายขึ้น แทนการแสดงเรียงยาวทีละรายการ
 const sections = [
@@ -37,6 +37,7 @@ const DATE_KEYS = ['receivedAt', 'appointment', 'appointmentEnd', 'completedAt']
 
 // รองรับทั้งรูปแบบเก่า (data:image base64) และรูปแบบใหม่ (URL จาก Supabase Storage / เก็บบนเซิร์ฟเวอร์)
 const isImageValue = (key, value) => IMAGE_KEYS.includes(key) && typeof value === 'string' && value.trim().length > 0;
+const isMissingImageValue = (key, value) => IMAGE_KEYS.includes(key) && typeof value === 'string' && value.trim().length > 0 && !isViewableImageUrl(value);
 
 export default function RequestDetail({ request, onBack, onEdit, onDelete }) {
   return (
@@ -73,10 +74,12 @@ export default function RequestDetail({ request, onBack, onEdit, onDelete }) {
                   return (
                     <div className={`detail-field ${WIDE_KEYS.includes(key) ? 'detail-wide' : ''}`} key={key}>
                       <span>{label}</span>
-                      {isImageValue(key, value) ? (
+                      {isImageValue(key, value) && isViewableImageUrl(value) ? (
                         <a href={value} target="_blank" rel="noreferrer">
                           <img src={value} alt={label} />
                         </a>
+                      ) : isMissingImageValue(key, value) ? (
+                        <em className="image-unavailable">ไม่มีไฟล์รูปภาพ (ข้อมูลนำเข้าเก่า หารูปต้นฉบับไม่พบ)</em>
                       ) : (
                         <strong>{DATE_KEYS.includes(key) ? formatDate(value) : value}</strong>
                       )}

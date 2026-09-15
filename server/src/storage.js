@@ -32,15 +32,18 @@ const safeFileName = (fileName) => {
   return `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
 };
 
-const publicBase = () => (process.env.PUBLIC_API_URL || '').replace(/\/+$/, '');
+const publicBase = (requestOrigin) => (process.env.PUBLIC_API_URL || requestOrigin || '').replace(/\/+$/, '');
 
-const saveLocally = (buffer, key) => {
+const saveLocally = (buffer, key, requestOrigin) => {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
   fs.writeFileSync(path.join(UPLOAD_DIR, key), buffer);
-  return `${publicBase()}${LOCAL_URL_PREFIX}${key}`;
+  return `${publicBase(requestOrigin)}${LOCAL_URL_PREFIX}${key}`;
 };
 
-export const storeImage = async (bucket, buffer, originalName) => {
+// requestOrigin (เช่น "https://serviceteam-api.onrender.com" จาก req.protocol+req.get('host'))
+// ใช้เป็นค่า fallback เวลาไม่ได้ตั้ง PUBLIC_API_URL ไว้ กันไม่ให้ URL รูปที่บันทึกลงดิสก์ในเครื่อง
+// กลายเป็นพาธที่ไม่มีโดเมน (เปิดจากหน้าเว็บ frontend คนละ origin แล้วเจอ 404)
+export const storeImage = async (bucket, buffer, originalName, requestOrigin) => {
   if (!buffer?.length) return null;
 
   const key = safeFileName(originalName);
@@ -52,7 +55,7 @@ export const storeImage = async (bucket, buffer, originalName) => {
     console.warn(
       `Supabase storage unavailable (${error?.message || error}) - saving image to local disk instead`,
     );
-    return saveLocally(buffer, key);
+    return saveLocally(buffer, key, requestOrigin);
   }
 };
 

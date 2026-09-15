@@ -7,6 +7,7 @@ import FilterPanel from './FilterPanel.jsx';
 import EditableDropdown from './EditableDropdown.jsx';
 import { getStoredDropdownData, addDropdownValue, removeDropdownValue } from './excelDataManager.js';
 import { dateFields as filterDateFields } from './FilterPanel.jsx';
+import { isViewableImageUrl } from './requestUtils.js';
 
 // ตัด "/" ท้ายออก กัน URL ซ้อนกัน (เช่น "https://api.example.com/" + "/api/requests" จะกลายเป็น "...com//api/requests" ซึ่ง 404)
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
@@ -1019,7 +1020,11 @@ function FileField({ name, label, value, onChange }) {
         disabled={isUploading}
       />
       <span>{isUploading ? '⟳' : '▣'}</span>
-      {value && <img className="image-preview" src={value} alt="ตัวอย่างรูปภาพ" />}
+      {value && (isViewableImageUrl(value) ? (
+        <img className="image-preview" src={value} alt="ตัวอย่างรูปภาพ" />
+      ) : (
+        <em className="image-unavailable">ไม่มีไฟล์รูปภาพ (ข้อมูลนำเข้าเก่า หารูปต้นฉบับไม่พบ)</em>
+      ))}
     </label>
   );
 }

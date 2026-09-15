@@ -5,6 +5,9 @@ import { supabase } from './supabase.js';
 import { storeImage, removeImage, UPLOAD_DIR } from './storage.js';
 
 const app = express();
+// Render (และ reverse proxy อื่นๆ) เชื่อม TLS เข้ามาแล้วส่งต่อเป็น http ภายใน
+// ถ้าไม่ตั้งค่านี้ req.protocol จะรายงานเป็น "http" เสมอ ทำให้ URL รูปที่ fallback ไปเก็บบนดิสก์ผิดเป็น http://
+app.set('trust proxy', true);
 const PORT = Number(process.env.PORT || 4001);
 
 const REQUEST_COLUMNS = [
@@ -237,7 +240,7 @@ app.post('/api/upload', async (req, res) => {
       return res.status(400).json({ message: 'File is empty or not valid base64' });
     }
 
-    const publicUrl = await storeImage(bucket, buffer, fileName);
+    const publicUrl = await storeImage(bucket, buffer, fileName, `${req.protocol}://${req.get('host')}`);
 
     res.json({ url: publicUrl });
   } catch (error) {
