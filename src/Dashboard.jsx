@@ -98,8 +98,8 @@ export default function Dashboard({ requests }) {
     },
     {
       number: '3',
-      label: 'นัดหมายงาน รับเรื่อง',
-      value: dayRequests.filter((item) => item.appointment).length,
+      label: 'รับเรื่อง',
+      value: allRequests.filter((item) => item.status === 'รับเรื่อง').length,
       tone: 'yellow',
       children: [],
     },
