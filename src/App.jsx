@@ -738,6 +738,9 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
     ...emptyRequest,
     ...normalizeRequest(request),
     receivedAt: request.id ? toDateTimeLocalValue(request.receivedAt) : toDateTimeLocalValue(),
+    appointment: request.appointment ? toDateTimeLocalValue(request.appointment) : '',
+    appointmentEnd: request.appointmentEnd ? toDateTimeLocalValue(request.appointmentEnd) : '',
+    completedAt: request.completedAt ? toDateTimeLocalValue(request.completedAt) : '',
     ticket: request.ticket || '',
   }));
   const [dropdownData, setDropdownData] = useState(getStoredDropdownData());
