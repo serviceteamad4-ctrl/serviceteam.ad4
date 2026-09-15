@@ -769,6 +769,13 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
     </label>
   );
 
+  const textarea = (name, label, required = false) => (
+    <label key={name} className="editor-field editor-field-span">
+      <span>{label}{required && <em>*</em>}</span>
+      <textarea name={name} rows={4} value={form[name] || ''} onChange={update} required={required} />
+    </label>
+  );
+
   return (
     <section className="view active-view">
       <div className="editor-shell">
@@ -850,7 +857,7 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
             {text('site', 'สถานที่ตั้ง')}
             {text('contact', 'ผู้ติดต่อ')}
             {text('phone', 'เบอร์ติดต่อ')}
-            {text('description', 'ข้อมูลการรับแจ้ง', true)}
+            {textarea('description', 'ข้อมูลการรับแจ้ง', true)}
             <div className="editor-field editor-field-span">
               <FileField name="image" label="รูปภาพที่แจ้ง" value={form.image} onChange={update} />
             </div>
@@ -923,7 +930,8 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
             {text('completedAt', 'วันเวลาเสร็จ', false, 'datetime-local')}
             {text('map', 'MAP')}
             {text('vehicle', 'ทะเบียนรถ')}
-            {text('notes', 'หมายเหตุ')}
+            {textarea('action', 'รายละเอียดการดำเนินการ')}
+            {textarea('notes', 'หมายเหตุ')}
             {text('file', 'ไฟล์', false, 'url')}
           </div>
         </form>
