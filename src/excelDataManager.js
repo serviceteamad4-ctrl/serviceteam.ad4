@@ -65,17 +65,30 @@ const DEFAULT_DROPDOWN_DATA = {
   assignee: [],
   source: ['ไลน์', 'โทรศัพท์', 'อีเมล', 'เว็บไซต์'],
   jobType: ['แนะนำ', 'แก้ไขหน้างาน', 'รีโมท', 'ประเมินราคา', 'เทรน'],
-  status: ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รออะไหล่', 'เรียบร้อยปกติ', 'รอเสนอราคา'],
+  status: ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด', 'รออะไหล่', 'เสนอราคา', 'รอเสนอราคา', 'เรียบร้อยปกติ', 'ยกเลิก'],
   equipment: ['จอ LED', 'Kiosk', 'กล่องเล่นสื่อ', 'อื่นๆ'],
   // ค่าที่ผู้ใช้ลบทิ้งจากดรอปดาวน์ (รวมถึงค่าที่ดึงมาจากประวัติงานจริง) จะถูกจำไว้ที่นี่
   // เพื่อไม่ให้กลับมาโผล่อีกแม้จะยังมีอยู่ในข้อมูลเก่า
   hidden: {},
 };
 
+// รวมค่า default ในโค้ดกับค่าที่เคยบันทึกไว้ใน localStorage ของเบราว์เซอร์นั้นๆ เข้าด้วยกัน (ไม่ใช่แทนที่)
+// ถ้าแทนที่ตรงๆ ตัวเลือกใหม่ที่เพิ่มเข้ามาในโค้ดทีหลัง (เช่นสถานะใหม่) จะไม่โผล่ให้ผู้ใช้ที่เคย
+// กด "เพิ่ม/ลบ" ตัวเลือกอื่นมาก่อน เพราะ localStorage เก็บ list เก่าทับไว้อยู่แล้ว
 export const getStoredDropdownData = () => {
   try {
     const stored = localStorage.getItem('dropdown-data');
-    return stored ? { ...DEFAULT_DROPDOWN_DATA, ...JSON.parse(stored) } : { ...DEFAULT_DROPDOWN_DATA };
+    const parsed = stored ? JSON.parse(stored) : {};
+    const hidden = parsed.hidden || {};
+    const merged = { ...DEFAULT_DROPDOWN_DATA, ...parsed, hidden };
+
+    Object.keys(DEFAULT_DROPDOWN_DATA).forEach((field) => {
+      if (field === 'hidden') return;
+      const combined = Array.from(new Set([...(DEFAULT_DROPDOWN_DATA[field] || []), ...(parsed[field] || [])]));
+      merged[field] = combined.filter((value) => !(hidden[field] || []).includes(value));
+    });
+
+    return merged;
   } catch {
     return { ...DEFAULT_DROPDOWN_DATA };
   }
