@@ -66,7 +66,7 @@ export default function Dashboard({ requests }) {
     { number: '5', label: 'กำลังดำเนินการ', value: allRequests.filter((item) => item.status === 'กำลังดำเนินการ').length, tone: 'blue', children: [] },
     { number: '6', label: 'รอลูกค้าสรุป', value: allRequests.filter((item) => item.status === 'รอลูกค้าสรุปงาน').length, tone: 'amber', children: [] },
     { number: '7', label: 'รอส่งตามวันที่', value: allRequests.filter((item) => ['รอส่งสื่อ', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด'].includes(item.status)).length, tone: 'purple', children: [] },
-    { number: '8', label: 'เสนอราคา/รออนุมัติ', value: allRequests.filter((item) => ['เสนอราคา', 'รอเสนอราคา'].includes(item.status)).length, tone: 'gray', children: [] },
+    { number: '8', label: 'เสนอราคา/รออนุมัติ', value: allRequests.filter((item) => item.status === 'รอเสนอราคา').length, tone: 'gray', children: [] },
     { number: '9', label: 'รออะไหล่', value: allRequests.filter((item) => item.status === 'รออะไหล่').length, tone: 'green', children: [] },
     { number: '10', label: 'ติดตาม/ไม่ทันเวลา', value: allRequests.filter((item) => item.notes?.includes('ไม่ทัน')).length, tone: 'gray', children: [] },
     { number: '11', label: 'งานที่เปิดอยู่', value: allRequests.filter((item) => !['ยกเลิก', 'เรียบร้อยปกติ'].includes(item.status)).length, tone: 'blue', children: [] },

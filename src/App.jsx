@@ -14,7 +14,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
 // ลำดับสถานะที่ต้องแสดง "รับเรื่อง" มาก่อนเสมอ ใช้ทั้งจัดเรียงก่อนแบ่งหน้าและจัดกลุ่มในตาราง
 // เพื่อไม่ให้การแบ่งหน้าตัดกลุ่มสถานะเดียวกันขาดออกจากกันแบบสุ่มตามวันที่
-const STATUS_ORDER = ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด', 'รออะไหล่', 'เสนอราคา', 'รอเสนอราคา', 'เรียบร้อยปกติ', 'ยกเลิก'];
+const STATUS_ORDER = ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด', 'รออะไหล่', 'รอเสนอราคา', 'เรียบร้อยปกติ', 'ยกเลิก'];
 const statusRank = (status) => {
   const index = STATUS_ORDER.indexOf(status);
   return index === -1 ? STATUS_ORDER.length : index;
@@ -67,9 +67,15 @@ const monthKeyFromValue = (value) => {
   return `${year}-${month}`;
 };
 
+// "เสนอราคา" กับ "รอเสนอราคา" คือสถานะเดียวกัน รวมให้เหลือชื่อเดียวเพื่อไม่ให้งานกระจายเป็นสองกลุ่ม
+const STATUS_ALIASES = { 'เสนอราคา': 'รอเสนอราคา' };
+
 const normalizeRequest = (item = {}) => {
   const nextItem = { ...emptyRequest, ...item };
   delete nextItem.priority;
+  if (STATUS_ALIASES[nextItem.status]) {
+    nextItem.status = STATUS_ALIASES[nextItem.status];
+  }
   return nextItem;
 };
 
