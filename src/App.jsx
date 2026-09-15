@@ -32,7 +32,7 @@ const emptyRequest = {
   phone: '',
   description: '',
   image: '',
-  ma: 'N',
+  ma: '',
   jobType: 'แนะนำ',
   status: 'รับเรื่อง',
   assignee: '',
@@ -905,8 +905,8 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
             <div className="field-group editor-field">
               <span>MA</span>
               <div className="segmented">
-                <button type="button" className={form.ma === 'N' ? 'selected' : ''} onClick={() => setForm({ ...form, ma: 'N' })}>N</button>
-                <button type="button" className={form.ma === 'Y' ? 'selected' : ''} onClick={() => setForm({ ...form, ma: 'Y' })}>Y</button>
+                <button type="button" className={form.ma === 'N' ? 'selected' : ''} onClick={() => setForm({ ...form, ma: form.ma === 'N' ? '' : 'N' })}>N</button>
+                <button type="button" className={form.ma === 'Y' ? 'selected' : ''} onClick={() => setForm({ ...form, ma: form.ma === 'Y' ? '' : 'Y' })}>Y</button>
               </div>
             </div>
             <EditableDropdown
