@@ -69,6 +69,7 @@ export default function Dashboard({ requests }) {
     { number: '8', label: 'เสนอราคา/รออนุมัติ', value: allRequests.filter((item) => ['เสนอราคา', 'รอเสนอราคา'].includes(item.status)).length, tone: 'gray', children: [] },
     { number: '9', label: 'รออะไหล่', value: allRequests.filter((item) => item.status === 'รออะไหล่').length, tone: 'green', children: [] },
     { number: '10', label: 'ติดตาม/ไม่ทันเวลา', value: allRequests.filter((item) => item.notes?.includes('ไม่ทัน')).length, tone: 'gray', children: [] },
+    { number: '11', label: 'งานที่เปิดอยู่', value: allRequests.filter((item) => !['ยกเลิก', 'เรียบร้อยปกติ'].includes(item.status)).length, tone: 'blue', children: [] },
   ];
 
   const rows = [
