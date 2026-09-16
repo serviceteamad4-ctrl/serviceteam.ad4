@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { formatDate, isViewableImageUrl } from './requestUtils.js';
 
 // จัดกลุ่มฟิลด์เป็นหมวดหมู่ให้อ่านง่ายขึ้น แทนการแสดงเรียงยาวทีละรายการ
@@ -40,6 +41,8 @@ const isImageValue = (key, value) => IMAGE_KEYS.includes(key) && typeof value ==
 const isMissingImageValue = (key, value) => IMAGE_KEYS.includes(key) && typeof value === 'string' && value.trim().length > 0 && !isViewableImageUrl(value);
 
 export default function RequestDetail({ request, onBack, onEdit, onDelete }) {
+  const [lightboxImage, setLightboxImage] = useState(null);
+
   return (
     <section className="detail-page view active-view">
       <div className="detail-header">
@@ -75,9 +78,9 @@ export default function RequestDetail({ request, onBack, onEdit, onDelete }) {
                     <div className={`detail-field ${WIDE_KEYS.includes(key) ? 'detail-wide' : ''}`} key={key}>
                       <span>{label}</span>
                       {isImageValue(key, value) && isViewableImageUrl(value) ? (
-                        <a href={value} target="_blank" rel="noreferrer">
+                        <button type="button" className="image-zoom-trigger" onClick={() => setLightboxImage(value)}>
                           <img src={value} alt={label} />
-                        </a>
+                        </button>
                       ) : isMissingImageValue(key, value) ? (
                         <em className="image-unavailable">ไม่มีไฟล์รูปภาพ (ข้อมูลนำเข้าเก่า หารูปต้นฉบับไม่พบ)</em>
                       ) : (
@@ -91,6 +94,26 @@ export default function RequestDetail({ request, onBack, onEdit, onDelete }) {
           );
         })}
       </div>
+
+      {lightboxImage && (
+        <div className="modal" onClick={(event) => event.target === event.currentTarget && setLightboxImage(null)}>
+          <div style={{ position: 'relative', maxWidth: '92vw', maxHeight: '92vh' }}>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => setLightboxImage(null)}
+              style={{ position: 'absolute', top: '-44px', right: 0, color: '#fff' }}
+            >
+              ×
+            </button>
+            <img
+              src={lightboxImage}
+              alt="ภาพขยาย"
+              style={{ display: 'block', maxWidth: '92vw', maxHeight: '92vh', borderRadius: '8px' }}
+            />
+          </div>
+        </div>
+      )}
     </section>
   );
 }
