@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import { jsPDF } from 'jspdf';
 import Dashboard from './Dashboard.jsx';
@@ -278,6 +278,14 @@ function App() {
   const [advancedFilters, setAdvancedFilters] = useState({});
   const [editing, setEditing] = useState(null);
   const [selectedRequest, setSelectedRequest] = useState(null);
+  // จำตำแหน่งเลื่อนหน้าจอ + งานที่พึ่งเปิดดู ไว้ตอนกดแก้ไข/ดูรายละเอียด
+  // เพื่อให้กด "ย้อนกลับ" แล้วกลับมาที่เดิมโดยไม่ต้องเลื่อนหาใหม่
+  const listScrollRef = useRef(0);
+  const [lastVisitedId, setLastVisitedId] = useState(null);
+  const leaveList = (id) => {
+    listScrollRef.current = window.scrollY;
+    setLastVisitedId(id || null);
+  };
   const [toast, setToast] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -545,7 +553,10 @@ function App() {
             />
           ) : (
             <RequestsView
-              onView={(request) => setSelectedRequest(request)}
+              onView={(request) => { leaveList(request.id); setSelectedRequest(request); }}
+              scrollRestoreRef={listScrollRef}
+              highlightId={lastVisitedId}
+              onHighlightExpire={() => setLastVisitedId(null)}
               requests={requests}
               filtered={filtered}
               pageItems={paginatedFiltered}
@@ -564,8 +575,8 @@ function App() {
               setFilterOpen={setFilterOpen}
               advancedFilters={advancedFilters}
               setAdvancedFilters={setAdvancedFilters}
-              onAdd={() => setEditing({ ...emptyRequest })}
-              onEdit={(request) => setEditing(request)}
+              onAdd={() => { leaveList(null); setEditing({ ...emptyRequest }); }}
+              onEdit={(request) => { leaveList(request.id); setEditing(request); }}
               onExport={exportCsv}
               onExportPdf={() => printPdf('รายการที่กรอง', filtered)}
               isLoading={isLoading}
@@ -597,8 +608,22 @@ const formatChipDate = (value) => {
   return d && m && y ? `${d}/${m}/${y}` : value;
 };
 
-function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, advancedFilters, setAdvancedFilters, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error }) {
+function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, advancedFilters, setAdvancedFilters, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error, scrollRestoreRef, highlightId, onHighlightExpire }) {
   const monthInputRef = useRef(null);
+
+  // กลับมาหน้ารายการแล้วเลื่อนไปตำแหน่งเดิมที่เคยอยู่ก่อนกดดู/แก้ไขงาน แทนที่จะเริ่มจากบนสุดใหม่
+  useLayoutEffect(() => {
+    if (scrollRestoreRef?.current) {
+      window.scrollTo(0, scrollRestoreRef.current);
+    }
+  }, []);
+
+  // ไฮไลต์แถวที่พึ่งกลับมาจากหน้ารายละเอียด/แก้ไข ชั่วครู่ให้หาเจอง่าย แล้วค่อยจางหายไป
+  useEffect(() => {
+    if (!highlightId) return undefined;
+    const timer = setTimeout(() => onHighlightExpire?.(), 2600);
+    return () => clearTimeout(timer);
+  }, [highlightId, onHighlightExpire]);
   const activeFilterChips = useMemo(() => Object.entries(advancedFilters || {}).reduce((chips, [key, value]) => {
     const label = filterFieldLabels[key] || key;
     if (filterDateFields.includes(key)) {
@@ -706,18 +731,21 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
                   {['ลูกค้า', 'อ้างอิง', 'เลขติดตาม', 'สถานที่/สาขา', 'ผู้ดำเนินการ', 'จัดการ'].map((label) => (
                     <div key={label} style={{ padding: '8px 10px', background: '#f7f8fc', borderBottom: '1px solid #dfe3ee', borderRight: '1px solid #eef1ef', fontWeight: 700, color: '#59627a' }}>{label}</div>
                   ))}
-                  {group.items.map((request) => (
+                  {group.items.map((request) => {
+                    const rowHighlight = { backgroundColor: request.id === highlightId ? '#fff4d6' : 'transparent', transition: 'background-color 1.2s ease' };
+                    return (
                     <React.Fragment key={request.id}>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }} onClick={() => onView(request)}>{request.customer || '—'}</div>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }} onClick={() => onView(request)}>{request.ref || '-'}</div>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }} onClick={() => onView(request)}>{request.ticket || '-'}</div>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }} onClick={() => onView(request)}>{request.location || '—'}</div>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }} onClick={() => onView(request)}>{request.assignee || '—'}</div>
-                      <div style={{ padding: '8px 8px', borderBottom: '1px solid #eef1ef', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight }} onClick={() => onView(request)}>{request.customer || '—'}</div>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight }} onClick={() => onView(request)}>{request.ref || '-'}</div>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight }} onClick={() => onView(request)}>{request.ticket || '-'}</div>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight }} onClick={() => onView(request)}>{request.location || '—'}</div>
+                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight }} onClick={() => onView(request)}>{request.assignee || '—'}</div>
+                      <div style={{ padding: '8px 8px', borderBottom: '1px solid #eef1ef', display: 'flex', alignItems: 'center', justifyContent: 'center', ...rowHighlight }}>
                         <button type="button" className="secondary-btn" onClick={(event) => { event.stopPropagation(); onEdit(request); }}>แก้ไข</button>
                       </div>
                     </React.Fragment>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}
