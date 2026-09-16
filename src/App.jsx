@@ -946,6 +946,7 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
                 update({ target: { name: 'assignee', value } });
               }}
               onRemoveOption={(value) => handleRemoveDropdownValue('assignee', value)}
+              multiple
             />
             {form.status === 'กำลังดำเนินการ' && (
               <>

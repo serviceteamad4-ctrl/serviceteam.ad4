@@ -1,11 +1,30 @@
 import { useState } from 'react';
 
-export default function EditableDropdown({ name, label, value, options = [], onChange, onAddOption, onRemoveOption, required = false }) {
+export default function EditableDropdown({ name, label, value, options = [], onChange, onAddOption, onRemoveOption, required = false, multiple = false }) {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [showDeleteMode, setShowDeleteMode] = useState(false);
 
+  // ตัดช่องว่างซ้ำ/ช่องว่างแบบพิเศษ (เช่น non-breaking space จากไฟล์ Excel) ออกก่อนเทียบ
+  // เพื่อให้พิมพ์คำค้นบางส่วน เช่น "bangna" แล้วเจอ "Central   Bangna" ได้แม้มีช่องว่างเกิน
+  const normalize = (text) => String(text || '').replace(new RegExp(String.fromCharCode(160), 'g'), ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+
+  // multiple: เก็บผู้ดำเนินการหลายคนไว้ในสตริงเดียวคั่นด้วย ", " เพื่อให้ยังใช้กับตาราง/ตัวกรอง/export เดิมได้
+  const selectedList = multiple ? String(value || '').split(',').map((s) => s.trim()).filter(Boolean) : [];
+
+  const toggleMultiValue = (option) => {
+    const next = selectedList.includes(option)
+      ? selectedList.filter((v) => v !== option)
+      : [...selectedList, option];
+    onChange({ target: { name, value: next.join(', ') } });
+  };
+
   const handleSelect = (option) => {
+    if (multiple) {
+      toggleMultiValue(option);
+      setInputValue('');
+      return;
+    }
     onChange({ target: { name, value: option } });
     setIsOpen(false);
     setInputValue('');
@@ -13,7 +32,22 @@ export default function EditableDropdown({ name, label, value, options = [], onC
 
   const handleAddNew = () => {
     const newValue = inputValue.trim();
-    if (newValue && !options.includes(newValue)) {
+    if (!newValue) return;
+
+    if (multiple) {
+      const existingOption = options.find((opt) => normalize(opt) === normalize(newValue));
+      const finalValue = existingOption || newValue;
+      if (!existingOption) {
+        onAddOption(finalValue);
+      }
+      if (!selectedList.includes(finalValue)) {
+        toggleMultiValue(finalValue);
+      }
+      setInputValue('');
+      return;
+    }
+
+    if (!options.includes(newValue)) {
       onAddOption(newValue);
       handleSelect(newValue);
       setInputValue('');
@@ -31,9 +65,6 @@ export default function EditableDropdown({ name, label, value, options = [], onC
     }
   };
 
-  // ตัดช่องว่างซ้ำ/ช่องว่างแบบพิเศษ (เช่น non-breaking space จากไฟล์ Excel) ออกก่อนเทียบ
-  // เพื่อให้พิมพ์คำค้นบางส่วน เช่น "bangna" แล้วเจอ "Central   Bangna" ได้แม้มีช่องว่างเกิน
-  const normalize = (text) => String(text || '').replace(new RegExp(String.fromCharCode(160), 'g'), ' ').replace(/\s+/g, ' ').trim().toLowerCase();
   const normalizedInput = normalize(inputValue);
   const filteredOptions = options.filter((opt) => normalize(opt).includes(normalizedInput));
 
@@ -53,7 +84,7 @@ export default function EditableDropdown({ name, label, value, options = [], onC
             onClick={() => setIsOpen(true)}
             onFocus={() => setIsOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder={isOpen ? 'ค้นหาหรือพิมพ์ค่าใหม่...' : 'เลือก...'}
+            placeholder={isOpen ? (multiple ? 'ค้นหาหรือพิมพ์ชื่อคนใหม่ (เลือกได้หลายคน)...' : 'ค้นหาหรือพิมพ์ค่าใหม่...') : 'เลือก...'}
             style={{ flex: 1 }}
           />
           {isOpen && (
@@ -98,6 +129,35 @@ export default function EditableDropdown({ name, label, value, options = [], onC
             onClick={(e) => e.preventDefault()}
             onMouseLeave={() => !showDeleteMode && setIsOpen(false)}
           >
+            {multiple && !showDeleteMode && selectedList.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', padding: '8px', borderBottom: '1px solid #eee' }}>
+                {selectedList.map((person) => (
+                  <span
+                    key={person}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      background: '#eef0ff',
+                      color: '#3d3dbf',
+                      borderRadius: '999px',
+                      padding: '4px 6px 4px 10px',
+                      fontSize: '13px',
+                    }}
+                  >
+                    {person}
+                    <button
+                      type="button"
+                      onClick={() => toggleMultiValue(person)}
+                      title="เอาออก"
+                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#3d3dbf', fontWeight: 700, lineHeight: 1, padding: '0 4px' }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             {showDeleteMode ? (
               <div style={{ padding: '8px' }}>
                 <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
@@ -152,27 +212,30 @@ export default function EditableDropdown({ name, label, value, options = [], onC
                 {filteredOptions.length === 0 ? (
                   <div style={{ padding: '8px', color: '#999' }}>ไม่พบรายการ</div>
                 ) : (
-                  filteredOptions.map((option) => (
-                    <div
-                      key={option}
-                      onClick={() => handleSelect(option)}
-                      style={{
-                        padding: '10px 12px',
-                        cursor: 'pointer',
-                        background: value === option ? '#f0f0ff' : '#fff',
-                        borderBottom: '1px solid #eee',
-                        color: '#333',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#f9f9f9';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = value === option ? '#f0f0ff' : '#fff';
-                      }}
-                    >
-                      {option}
-                    </div>
-                  ))
+                  filteredOptions.map((option) => {
+                    const isSelected = multiple ? selectedList.includes(option) : value === option;
+                    return (
+                      <div
+                        key={option}
+                        onClick={() => handleSelect(option)}
+                        style={{
+                          padding: '10px 12px',
+                          cursor: 'pointer',
+                          background: isSelected ? '#f0f0ff' : '#fff',
+                          borderBottom: '1px solid #eee',
+                          color: '#333',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#f9f9f9';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = isSelected ? '#f0f0ff' : '#fff';
+                        }}
+                      >
+                        {multiple && isSelected ? `✓ ${option}` : option}
+                      </div>
+                    );
+                  })
                 )}
               </>
             )}
