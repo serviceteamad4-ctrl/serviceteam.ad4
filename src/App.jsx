@@ -763,7 +763,9 @@ const uniqueSorted = (values) => Array.from(new Set(values.map((v) => String(v |
 const deriveOptionsFromRequests = (requests) => ({
   customer: uniqueSorted(requests.map((r) => r.customer)),
   location: uniqueSorted(requests.map((r) => r.location)),
-  assignee: uniqueSorted(requests.map((r) => r.assignee)),
+  // ผู้ดำเนินการเก่าบางงานพิมพ์รวมกันเป็นสตริงเดียวคั่นด้วย "," (เช่น "PLAY, อีฟ")
+  // แยกออกเป็นชื่อเดี่ยวๆ ก่อน ไม่ให้ตัวเลือกในดรอปดาวน์เหลือเป็นก้อนรวมชื่อ
+  assignee: uniqueSorted(requests.flatMap((r) => String(r.assignee || '').split(','))),
 });
 
 const mergeOptions = (...lists) => uniqueSorted(lists.flat());
@@ -939,7 +941,7 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
               name="assignee"
               label="ผู้ดำเนินการ"
               value={form.assignee || ''}
-              options={excludeHidden(mergeOptions(dropdownData.assignee || [], historyOptions.assignee), dropdownData.hidden?.assignee)}
+              options={excludeHidden(mergeOptions(dropdownData.assignee || [], historyOptions.assignee), dropdownData.hidden?.assignee).filter((opt) => !opt.includes(','))}
               onChange={update}
               onAddOption={(value) => {
                 handleAddDropdownValue('assignee', value);
