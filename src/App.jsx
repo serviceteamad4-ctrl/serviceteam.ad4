@@ -545,10 +545,10 @@ function App() {
               }}
             />
           ) : (
-            <div className="requests-split">
+            <div className={`requests-split${selectedRequest ? ' has-detail' : ''}`}>
               <div className="requests-split-list">
                 <RequestsView
-                  compact
+                  compact={Boolean(selectedRequest)}
                   selectedId={selectedRequest?.id}
                   onView={(request) => setSelectedRequest(request)}
                   scrollRestoreRef={listScrollRef}
@@ -581,7 +581,7 @@ function App() {
                 />
               </div>
               <div className="requests-split-detail">
-                {selectedRequest ? (
+                {selectedRequest && (
                   <RequestDetail
                     embedded
                     request={selectedRequest}
@@ -589,8 +589,6 @@ function App() {
                     onEdit={(request) => { setSelectedRequest(null); setEditing(request); }}
                     onDelete={() => { setSelectedRequest(null); handleDeleteRequest(selectedRequest.id); }}
                   />
-                ) : (
-                  <div className="requests-split-empty">เลือกงานจากรายการด้านซ้ายเพื่อดูรายละเอียด</div>
                 )}
               </div>
             </div>
