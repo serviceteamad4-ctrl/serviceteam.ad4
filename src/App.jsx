@@ -125,7 +125,7 @@ const pdfDetailFields = [
 ];
 
 const pdfValue = (key, value) => ['receivedAt', 'appointment', 'appointmentEnd', 'completedAt'].includes(key)
-  ? new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+  ? new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Bangkok' }).format(new Date(value))
   : String(value);
 
 const printPdf = async (title, exportItems = []) => {
