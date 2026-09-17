@@ -20,6 +20,29 @@ const REQUEST_COLUMNS = [
 // ตัด "/" ท้ายออกก่อนเทียบ กัน FRONTEND_URL ที่ตั้งไว้ผิดแบบมี/ไม่มี "/" ต่อท้ายแล้วเทียบไม่ตรง
 const normalizeOrigin = (value) => String(value || '').replace(/\/+$/, '');
 
+// input type="datetime-local" ของฟอร์มส่ง string แบบไม่มี timezone มา (เช่น "2026-09-17T09:59")
+// ซึ่งหมายถึงเวลาตามนาฬิกาไทย (Asia/Bangkok, UTC+7) เสมอ ไม่ใช่เวลาของเครื่อง/โซนของเซิร์ฟเวอร์
+// ถ้าปล่อยให้ new Date(value) เดาเอง จะยึด timezone ของเซิร์ฟเวอร์ที่รันจริง (บน Render คือ UTC)
+// ทำให้เวลาที่บันทึกเพี้ยนไป 7 ชั่วโมงจากที่ผู้ใช้กรอกจริง จึงต้องแปลงเป็น UTC ให้ตรงกับ Asia/Bangkok เอง
+const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
+const bangkokInputToISOString = (value) => {
+  if (!value) return null;
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) {
+    const fallback = new Date(value);
+    return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString();
+  }
+  const parts = match.slice(1).map(Number);
+  const year = parts[0];
+  const month = parts[1];
+  const day = parts[2];
+  const hour = parts[3];
+  const minute = parts[4];
+  const second = parts[5] || 0;
+  const utcMs = Date.UTC(year, month - 1, day, hour, minute, second) - BANGKOK_OFFSET_MS;
+  return new Date(utcMs).toISOString();
+};
+
 app.use(cors({
   origin: (origin, callback) => {
     const isLocalFrontend = !origin
@@ -111,7 +134,7 @@ app.post('/api/requests', async (req, res) => {
         customer: body.customer || '',
         ref: body.ref || null,
         source: body.source || null,
-        receivedAt: body.receivedAt ? new Date(body.receivedAt).toISOString() : new Date().toISOString(),
+        receivedAt: body.receivedAt ? bangkokInputToISOString(body.receivedAt) : new Date().toISOString(),
         ticket: body.ticket || null,
         location: body.location || null,
         site: body.site || null,
@@ -123,13 +146,13 @@ app.post('/api/requests', async (req, res) => {
         jobType: body.jobType || null,
         status: body.status || null,
         assignee: body.assignee || null,
-        appointment: body.appointment ? new Date(body.appointment).toISOString() : null,
-        appointmentEnd: body.appointmentEnd ? new Date(body.appointmentEnd).toISOString() : null,
+        appointment: body.appointment ? bangkokInputToISOString(body.appointment) : null,
+        appointmentEnd: body.appointmentEnd ? bangkokInputToISOString(body.appointmentEnd) : null,
         action: body.action || null,
         result: body.result || null,
         equipment: body.equipment || null,
         completedImage: body.completedImage || null,
-        completedAt: body.completedAt ? new Date(body.completedAt).toISOString() : null,
+        completedAt: body.completedAt ? bangkokInputToISOString(body.completedAt) : null,
         map: body.map || null,
         vehicle: body.vehicle || null,
         notes: body.notes || null,
@@ -157,7 +180,7 @@ app.put('/api/requests/:id', async (req, res) => {
     setIfDefined('customer', body.customer);
     setIfDefined('ref', body.ref);
     setIfDefined('source', body.source);
-    setIfDefined('receivedAt', body.receivedAt ? new Date(body.receivedAt).toISOString() : undefined);
+    setIfDefined('receivedAt', body.receivedAt ? bangkokInputToISOString(body.receivedAt) : undefined);
     setIfDefined('ticket', body.ticket);
     setIfDefined('location', body.location);
     setIfDefined('site', body.site);
@@ -169,13 +192,13 @@ app.put('/api/requests/:id', async (req, res) => {
     setIfDefined('jobType', body.jobType);
     setIfDefined('status', body.status);
     setIfDefined('assignee', body.assignee);
-    setIfDefined('appointment', body.appointment ? new Date(body.appointment).toISOString() : undefined);
-    setIfDefined('appointmentEnd', body.appointmentEnd ? new Date(body.appointmentEnd).toISOString() : undefined);
+    setIfDefined('appointment', body.appointment ? bangkokInputToISOString(body.appointment) : undefined);
+    setIfDefined('appointmentEnd', body.appointmentEnd ? bangkokInputToISOString(body.appointmentEnd) : undefined);
     setIfDefined('action', body.action);
     setIfDefined('result', body.result);
     setIfDefined('equipment', body.equipment);
     setIfDefined('completedImage', body.completedImage);
-    setIfDefined('completedAt', body.completedAt ? new Date(body.completedAt).toISOString() : undefined);
+    setIfDefined('completedAt', body.completedAt ? bangkokInputToISOString(body.completedAt) : undefined);
     setIfDefined('map', body.map);
     setIfDefined('vehicle', body.vehicle);
     setIfDefined('notes', body.notes);
