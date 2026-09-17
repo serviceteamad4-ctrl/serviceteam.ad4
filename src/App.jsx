@@ -75,11 +75,23 @@ const formatDate = (value) => value ? new Intl.DateTimeFormat('th-TH-u-ca-gregor
 
 // input type="datetime-local" ต้องการ "YYYY-MM-DDTHH:mm" แบบเวลาท้องถิ่น ไม่ใช่ UTC
 // toISOString() คืนเวลา UTC เสมอ ถ้าใช้ตรงๆ เวลาที่ขึ้นในฟอร์มจะเพี้ยนไปตาม timezone offset (เช่น ไทย +7 ชม.)
+//
+// เดิมใช้ date.getHours()/getFullYear() ฯลฯ ซึ่งอ่านค่าตาม timezone ของเครื่อง/เบราว์เซอร์ผู้ใช้เอง
+// ถ้าเครื่องไม่ได้ตั้งเป็นเวลาไทย ฟอร์มแก้ไขจะโชว์เวลาผิดตั้งแต่เปิดขึ้นมา (ก่อนจะกดบันทึกซ้ำอีกที)
+// ต้องดึงเป็นเวลาไทย (Asia/Bangkok) ตรงๆ เสมอ ไม่พึ่ง timezone ของเครื่องที่รันอยู่
 const toDateTimeLocalValue = (value) => {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return '';
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(date).reduce((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {});
+  const hour = parts.hour === '24' ? '00' : parts.hour;
+  return `${parts.year}-${parts.month}-${parts.day}T${hour}:${parts.minute}`;
 };
 
 const monthKeyFromValue = (value) => {
