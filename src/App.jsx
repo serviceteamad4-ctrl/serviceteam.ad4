@@ -12,6 +12,28 @@ import { isViewableImageUrl } from './requestUtils.js';
 // ตัด "/" ท้ายออก กัน URL ซ้อนกัน (เช่น "https://api.example.com/" + "/api/requests" จะกลายเป็น "...com//api/requests" ซึ่ง 404)
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
+// ไอคอนเมนูซ้าย: ใช้ SVG เส้น (stroke) แทนตัวอักษร Unicode (▦ ◒) เพื่อให้ขนาด/น้ำหนักเส้นสม่ำเสมอกันทุกอัน
+function IconRequests() {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="3" width="12" height="14" rx="2" />
+      <path d="M7.5 3V2.6a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V3" />
+      <path d="M7 9.5h6M7 12.5h6M7 15.5h3" />
+    </svg>
+  );
+}
+
+function IconReports() {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3.5 16.5V9" />
+      <path d="M9.5 16.5V3" />
+      <path d="M15.5 16.5v-6" />
+      <path d="M3 16.5h14" />
+    </svg>
+  );
+}
+
 // ลำดับสถานะที่ต้องแสดง "รับเรื่อง" มาก่อนเสมอ ใช้ทั้งจัดเรียงก่อนแบ่งหน้าและจัดกลุ่มในตาราง
 // เพื่อไม่ให้การแบ่งหน้าตัดกลุ่มสถานะเดียวกันขาดออกจากกันแบบสุ่มตามวันที่
 const STATUS_ORDER = ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด', 'รออะไหล่', 'รอเสนอราคา', 'รอจัดคิวช่าง', 'เรียบร้อยปกติ', 'ยกเลิก'];
@@ -515,10 +537,10 @@ function App() {
         </div>
         <nav className="side-nav">
           <button className={`nav-item ${view === 'requests' ? 'active' : ''}`} onClick={() => setView('requests')} title="งานแจ้งบริการ">
-            <span>▦</span> <span className="nav-label">งานแจ้งบริการ</span>
+            <span className="nav-icon"><IconRequests /></span> <span className="nav-label">งานแจ้งบริการ</span>
           </button>
           <button className={`nav-item ${view === 'reports' ? 'active' : ''}`} onClick={() => setView('reports')} title="รายงานและสถิติ ประจำวัน">
-            <span>◒</span> <span className="nav-label">รายงานและสถิติ ประจำวัน</span>
+            <span className="nav-icon"><IconReports /></span> <span className="nav-label">รายงานและสถิติ ประจำวัน</span>
           </button>
         </nav>
         <div className="side-foot">
