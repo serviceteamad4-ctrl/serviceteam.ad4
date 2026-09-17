@@ -40,19 +40,20 @@ const DATE_KEYS = ['receivedAt', 'appointment', 'appointmentEnd', 'completedAt']
 const isImageValue = (key, value) => IMAGE_KEYS.includes(key) && typeof value === 'string' && value.trim().length > 0;
 const isMissingImageValue = (key, value) => IMAGE_KEYS.includes(key) && typeof value === 'string' && value.trim().length > 0 && !isViewableImageUrl(value);
 
-export default function RequestDetail({ request, onBack, onEdit, onDelete }) {
+export default function RequestDetail({ request, onBack, onEdit, onDelete, embedded = false }) {
   const [lightboxImage, setLightboxImage] = useState(null);
 
   return (
-    <section className="detail-page view active-view">
+    <section className={embedded ? 'detail-embedded' : 'detail-page view active-view'}>
       <div className="detail-header">
-        <button className="detail-back" onClick={onBack}>←</button>
+        {!embedded && <button className="detail-back" onClick={onBack}>←</button>}
         <div>
-          <p className="eyebrow">SERVICE REQUEST / DETAIL</p>
+          {!embedded && <p className="eyebrow">SERVICE REQUEST / DETAIL</p>}
           <h1>{request.ticket || request.ref || 'รายละเอียดงาน'}</h1>
-          <p className="subheading">รายละเอียดข้อมูลการแจ้งบริการ</p>
+          {!embedded && <p className="subheading">รายละเอียดข้อมูลการแจ้งบริการ</p>}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
+          {embedded && <button className="secondary-btn" type="button" onClick={onBack}>ปิด</button>}
           <button className="secondary-btn" type="button" onClick={() => onDelete && onDelete(request.id)}>ลบ</button>
           <button className="primary-btn" onClick={() => onEdit(request)}>แก้ไขงาน</button>
         </div>

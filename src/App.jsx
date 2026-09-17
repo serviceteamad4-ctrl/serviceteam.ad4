@@ -544,44 +544,56 @@ function App() {
                 setEditing(null);
               }}
             />
-          ) : selectedRequest ? (
-            <RequestDetail
-              request={selectedRequest}
-              onBack={() => setSelectedRequest(null)}
-              onEdit={(request) => { setSelectedRequest(null); setEditing(request); }}
-              onDelete={() => handleDeleteRequest(selectedRequest.id)}
-            />
           ) : (
-            <RequestsView
-              onView={(request) => { leaveList(request.id); setSelectedRequest(request); }}
-              scrollRestoreRef={listScrollRef}
-              highlightId={lastVisitedId}
-              onHighlightExpire={() => setLastVisitedId(null)}
-              requests={requests}
-              filtered={filtered}
-              pageItems={paginatedFiltered}
-              query={query}
-              setQuery={setQuery}
-              status={status}
-              setStatus={setStatus}
-              selectedMonth={selectedMonth}
-              setSelectedMonth={setSelectedMonth}
-              page={page}
-              setPage={setPage}
-              totalPages={totalPages}
-              pageSize={pageSize}
-              setPageSize={setPageSize}
-              filterOpen={filterOpen}
-              setFilterOpen={setFilterOpen}
-              advancedFilters={advancedFilters}
-              setAdvancedFilters={setAdvancedFilters}
-              onAdd={() => { leaveList(null); setEditing({ ...emptyRequest }); }}
-              onEdit={(request) => { leaveList(request.id); setEditing(request); }}
-              onExport={exportCsv}
-              onExportPdf={() => printPdf('รายการที่กรอง', filtered)}
-              isLoading={isLoading}
-              error={error}
-            />
+            <div className="requests-split">
+              <div className="requests-split-list">
+                <RequestsView
+                  compact
+                  selectedId={selectedRequest?.id}
+                  onView={(request) => setSelectedRequest(request)}
+                  scrollRestoreRef={listScrollRef}
+                  highlightId={lastVisitedId}
+                  onHighlightExpire={() => setLastVisitedId(null)}
+                  requests={requests}
+                  filtered={filtered}
+                  pageItems={paginatedFiltered}
+                  query={query}
+                  setQuery={setQuery}
+                  status={status}
+                  setStatus={setStatus}
+                  selectedMonth={selectedMonth}
+                  setSelectedMonth={setSelectedMonth}
+                  page={page}
+                  setPage={setPage}
+                  totalPages={totalPages}
+                  pageSize={pageSize}
+                  setPageSize={setPageSize}
+                  filterOpen={filterOpen}
+                  setFilterOpen={setFilterOpen}
+                  advancedFilters={advancedFilters}
+                  setAdvancedFilters={setAdvancedFilters}
+                  onAdd={() => { leaveList(null); setEditing({ ...emptyRequest }); }}
+                  onEdit={(request) => { leaveList(request.id); setEditing(request); }}
+                  onExport={exportCsv}
+                  onExportPdf={() => printPdf('รายการที่กรอง', filtered)}
+                  isLoading={isLoading}
+                  error={error}
+                />
+              </div>
+              <div className="requests-split-detail">
+                {selectedRequest ? (
+                  <RequestDetail
+                    embedded
+                    request={selectedRequest}
+                    onBack={() => setSelectedRequest(null)}
+                    onEdit={(request) => { setSelectedRequest(null); setEditing(request); }}
+                    onDelete={() => { setSelectedRequest(null); handleDeleteRequest(selectedRequest.id); }}
+                  />
+                ) : (
+                  <div className="requests-split-empty">เลือกงานจากรายการด้านซ้ายเพื่อดูรายละเอียด</div>
+                )}
+              </div>
+            </div>
           )
         ) : (
           <Dashboard requests={requests} />
@@ -608,7 +620,7 @@ const formatChipDate = (value) => {
   return d && m && y ? `${d}/${m}/${y}` : value;
 };
 
-function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, advancedFilters, setAdvancedFilters, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error, scrollRestoreRef, highlightId, onHighlightExpire }) {
+function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, advancedFilters, setAdvancedFilters, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error, scrollRestoreRef, highlightId, onHighlightExpire, compact = false, selectedId = null }) {
   const monthInputRef = useRef(null);
 
   // กลับมาหน้ารายการแล้วเลื่อนไปตำแหน่งเดิมที่เคยอยู่ก่อนกดดู/แก้ไขงาน แทนที่จะเริ่มจากบนสุดใหม่
@@ -666,11 +678,13 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
         <button className="primary-btn ui-button" onClick={onAdd}><span>+</span> เพิ่มงานใหม่</button>
       </div>
 
-      <div className="metric-row ui-card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(180px, 1fr))', gap: '14px', marginBottom: '14px' }}>
-        <Metric label="งานทั้งหมดในหน้านี้" value={filtered.length} style={{ boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', borderRadius: '18px', padding: '14px 16px', minHeight: '112px' }} />
-        <Metric label="งานที่ยังเปิดอยู่ในหน้านี้" value={active} className="accent" style={{ boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', borderRadius: '18px', padding: '14px 16px', minHeight: '112px' }} />
-        <Metric label="งานที่เสร็จแล้วในหน้านี้" value={done} style={{ boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', borderRadius: '18px', padding: '14px 16px', minHeight: '112px' }} />
-      </div>
+      {!compact && (
+        <div className="metric-row ui-card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(180px, 1fr))', gap: '14px', marginBottom: '14px' }}>
+          <Metric label="งานทั้งหมดในหน้านี้" value={filtered.length} style={{ boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', borderRadius: '18px', padding: '14px 16px', minHeight: '112px' }} />
+          <Metric label="งานที่ยังเปิดอยู่ในหน้านี้" value={active} className="accent" style={{ boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', borderRadius: '18px', padding: '14px 16px', minHeight: '112px' }} />
+          <Metric label="งานที่เสร็จแล้วในหน้านี้" value={done} style={{ boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', borderRadius: '18px', padding: '14px 16px', minHeight: '112px' }} />
+        </div>
+      )}
 
       <div className="toolbar ui-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
         <label className="search-box" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 0', minWidth: '0', width: '100%', height: '42px', border: '1px solid #dfe6e4', borderRadius: '14px', background: '#fff', padding: '0 10px 0 8px', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>
@@ -727,22 +741,35 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
                   {group.status}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 0.8fr 1.3fr 1.7fr 1.2fr 0.8fr', fontSize: '12px', color: '#18242b' }}>
-                  {['ลูกค้า', 'อ้างอิง', 'เลขติดตาม', 'สถานที่/สาขา', 'ผู้ดำเนินการ', 'จัดการ'].map((label) => (
+                <div style={{ display: 'grid', gridTemplateColumns: compact ? '1.4fr 1.2fr 1.4fr' : '1.3fr 0.8fr 1.3fr 1.7fr 1.2fr 0.8fr', fontSize: '12px', color: '#18242b' }}>
+                  {(compact ? ['ลูกค้า', 'เลขติดตาม', 'สถานที่/สาขา'] : ['ลูกค้า', 'อ้างอิง', 'เลขติดตาม', 'สถานที่/สาขา', 'ผู้ดำเนินการ', 'จัดการ']).map((label) => (
                     <div key={label} style={{ padding: '8px 10px', background: '#f7f8fc', borderBottom: '1px solid #dfe3ee', borderRight: '1px solid #eef1ef', fontWeight: 700, color: '#59627a' }}>{label}</div>
                   ))}
                   {group.items.map((request) => {
-                    const rowHighlight = { backgroundColor: request.id === highlightId ? '#fff4d6' : 'transparent', transition: 'background-color 1.2s ease' };
+                    const rowHighlight = {
+                      backgroundColor: request.id === selectedId ? '#e7f1fb' : request.id === highlightId ? '#fff4d6' : 'transparent',
+                      transition: 'background-color 1.2s ease',
+                    };
+                    const cellStyle = { padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight };
                     return (
                     <React.Fragment key={request.id}>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight }} onClick={() => onView(request)}>{request.customer || '—'}</div>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight }} onClick={() => onView(request)}>{request.ref || '-'}</div>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight }} onClick={() => onView(request)}>{request.ticket || '-'}</div>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight }} onClick={() => onView(request)}>{request.location || '—'}</div>
-                      <div style={{ padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight }} onClick={() => onView(request)}>{request.assignee || '—'}</div>
-                      <div style={{ padding: '8px 8px', borderBottom: '1px solid #eef1ef', display: 'flex', alignItems: 'center', justifyContent: 'center', ...rowHighlight }}>
-                        <button type="button" className="secondary-btn" onClick={(event) => { event.stopPropagation(); onEdit(request); }}>แก้ไข</button>
-                      </div>
+                      <div style={cellStyle} onClick={() => onView(request)}>{request.customer || '—'}</div>
+                      {compact ? (
+                        <>
+                          <div style={cellStyle} onClick={() => onView(request)}>{request.ticket || '-'}</div>
+                          <div style={cellStyle} onClick={() => onView(request)}>{request.location || '—'}</div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={cellStyle} onClick={() => onView(request)}>{request.ref || '-'}</div>
+                          <div style={cellStyle} onClick={() => onView(request)}>{request.ticket || '-'}</div>
+                          <div style={cellStyle} onClick={() => onView(request)}>{request.location || '—'}</div>
+                          <div style={cellStyle} onClick={() => onView(request)}>{request.assignee || '—'}</div>
+                          <div style={{ padding: '8px 8px', borderBottom: '1px solid #eef1ef', display: 'flex', alignItems: 'center', justifyContent: 'center', ...rowHighlight }}>
+                            <button type="button" className="secondary-btn" onClick={(event) => { event.stopPropagation(); onEdit(request); }}>แก้ไข</button>
+                          </div>
+                        </>
+                      )}
                     </React.Fragment>
                     );
                   })}
