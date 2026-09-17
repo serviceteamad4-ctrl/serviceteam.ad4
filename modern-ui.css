@@ -26,10 +26,13 @@ body {
 }
 
 .brand-mark {
-  width: 42px;
-  height: 42px;
-  border-radius: 13px;
-  box-shadow: 0 8px 18px rgba(242, 123, 99, .3);
+  display: block;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
 }
 
 .nav-item {

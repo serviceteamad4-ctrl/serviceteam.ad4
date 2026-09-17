@@ -8,6 +8,7 @@ import EditableDropdown from './EditableDropdown.jsx';
 import { getStoredDropdownData, addDropdownValue, removeDropdownValue } from './excelDataManager.js';
 import { dateFields as filterDateFields, filterFieldLabels } from './FilterPanel.jsx';
 import { isViewableImageUrl } from './requestUtils.js';
+import mascotLogo from './assets/mascot-dog.jpg';
 
 // ตัด "/" ท้ายออก กัน URL ซ้อนกัน (เช่น "https://api.example.com/" + "/api/requests" จะกลายเป็น "...com//api/requests" ซึ่ง 404)
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
@@ -520,7 +521,7 @@ function App() {
     <div className="app-shell">
       <aside className={`sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
         <div className="brand">
-          <span className="brand-mark">SD</span>
+          <img className="brand-mark" src={mascotLogo} alt="Service Desk" />
           <div className="brand-text">
             <strong>Service Desk </strong>
             <small></small>
@@ -555,7 +556,7 @@ function App() {
       <main className="main-content">
         <header className="topbar">
           <div className="mobile-brand">
-            <span className="brand-mark">SD</span>
+            <img className="brand-mark" src={mascotLogo} alt="Service Desk" />
             <strong>Service Desk</strong>
           </div>
           <div className="top-actions">
