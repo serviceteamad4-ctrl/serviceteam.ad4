@@ -327,3 +327,77 @@ body {
     width: 100%;
   }
 }
+
+/* เมนูซ้าย: ย่อ/ขยายได้ด้วยลูกศรที่มุมโลโก้ ย่อแล้วเหลือแค่ไอคอน SD ไอคอนเมนู และจุดสถานะ */
+.sidebar {
+  position: relative;
+  width: 250px;
+  transition: width 0.25s ease;
+  flex-shrink: 0;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  top: 4px;
+  right: -14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #dfe6e4;
+  background: #fff;
+  color: #123f40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+  transition: transform 0.25s ease;
+  z-index: 2;
+}
+
+/* .nav-item span{width:27px} (styles.css) is meant for the icon only; the label span needs its natural width */
+.nav-item .nav-label {
+  width: auto;
+  display: inline;
+}
+
+.sidebar.collapsed {
+  width: 76px;
+}
+
+.sidebar.collapsed .brand {
+  justify-content: center;
+  padding-right: 0;
+}
+
+.sidebar.collapsed .brand-text,
+.sidebar.collapsed .side-foot-text,
+.sidebar.collapsed .nav-label {
+  display: none;
+}
+
+.sidebar.collapsed .side-nav {
+  justify-items: center;
+}
+
+.sidebar.collapsed .nav-item {
+  width: 44px;
+  justify-content: center;
+  padding: 13px 0;
+}
+
+.sidebar.collapsed .side-foot {
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+  transform: rotate(180deg);
+}
+
+@media (max-width: 620px) {
+  .sidebar-toggle {
+    display: none;
+  }
+}

@@ -268,6 +268,7 @@ const printPdf = async (title, exportItems = []) => {
 function App() {
   const [requests, setRequests] = useState([]);
   const [view, setView] = useState('requests');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [status, setStatus] = useState('ทั้งหมด');
@@ -495,25 +496,34 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className={`sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
         <div className="brand">
           <span className="brand-mark">SD</span>
-          <div>
+          <div className="brand-text">
             <strong>Service Desk </strong>
             <small></small>
           </div>
+          <button
+            type="button"
+            className="sidebar-toggle"
+            onClick={() => setSidebarCollapsed((current) => !current)}
+            aria-label={sidebarCollapsed ? 'ขยายเมนู' : 'ย่อเมนู'}
+            title={sidebarCollapsed ? 'ขยายเมนู' : 'ย่อเมนู'}
+          >
+            ‹
+          </button>
         </div>
         <nav className="side-nav">
-          <button className={`nav-item ${view === 'requests' ? 'active' : ''}`} onClick={() => setView('requests')}>
-            <span>▦</span> งานแจ้งบริการ
+          <button className={`nav-item ${view === 'requests' ? 'active' : ''}`} onClick={() => setView('requests')} title="งานแจ้งบริการ">
+            <span>▦</span> <span className="nav-label">งานแจ้งบริการ</span>
           </button>
-          <button className={`nav-item ${view === 'reports' ? 'active' : ''}`} onClick={() => setView('reports')}>
-            <span>◒</span> รายงานและสถิติ ประจำวัน
+          <button className={`nav-item ${view === 'reports' ? 'active' : ''}`} onClick={() => setView('reports')} title="รายงานและสถิติ ประจำวัน">
+            <span>◒</span> <span className="nav-label">รายงานและสถิติ ประจำวัน</span>
           </button>
         </nav>
         <div className="side-foot">
           <div className="status-dot" />
-          <div>
+          <div className="side-foot-text">
             <strong></strong>
             <small></small>
           </div>
