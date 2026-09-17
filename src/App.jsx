@@ -90,6 +90,12 @@ const monthKeyFromValue = (value) => {
   return `${year}-${month}`;
 };
 
+// ค่าที่เก็บเป็น UTC ISO string การตัด 10 ตัวแรกตรงๆ จะได้วันที่ตาม UTC ไม่ใช่ตามเวลาไทย
+// ทำให้ตัวกรองช่วงวันที่พลาดงานที่รับแจ้ง/เสร็จช่วงเที่ยงคืน-ตี 6 ของไทย (ซึ่ง UTC ยังเป็นวันก่อนหน้า)
+const toBangkokDateKey = (value) => value
+  ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value))
+  : '';
+
 // "เสนอราคา" กับ "รอเสนอราคา" คือสถานะเดียวกัน รวมให้เหลือชื่อเดียวเพื่อไม่ให้งานกระจายเป็นสองกลุ่ม
 const STATUS_ALIASES = { 'เสนอราคา': 'รอเสนอราคา' };
 
@@ -359,7 +365,7 @@ function App() {
         if (selectedMonth && item.receivedAt && monthKeyFromValue(item.receivedAt) !== selectedMonth) return false;
         for (const [key, value] of advancedEntries) {
           if (filterDateFields.includes(key)) {
-            const itemDate = item[key] ? String(item[key]).slice(0, 10) : '';
+            const itemDate = toBangkokDateKey(item[key]);
             if (value.from && (!itemDate || itemDate < value.from)) return false;
             if (value.to && (!itemDate || itemDate > value.to)) return false;
             continue;

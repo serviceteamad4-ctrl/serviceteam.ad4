@@ -30,6 +30,13 @@ const groupedTypeCount = (items) => {
 
 const todayInBangkok = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
+// receivedAt/completedAt เก็บเป็น UTC ISO string การตัด 10 ตัวแรก (.slice(0,10)) จะได้ "วันที่ตาม UTC"
+// ไม่ใช่วันที่ตามเวลาไทย งานที่รับแจ้งช่วงเที่ยงคืน-ตี 6 ของไทย (ซึ่งยังเป็น UTC วันก่อนหน้า) จะถูกนับตกหล่นไปวันก่อน
+// ต้องแปลงเป็นวันที่ตาม Asia/Bangkok ก่อนเทียบเสมอ
+const toBangkokDate = (isoValue) => isoValue
+  ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(isoValue))
+  : '';
+
 export default function Dashboard({ requests }) {
   const [date, setDate] = useState(todayInBangkok);
   const [isExporting, setIsExporting] = useState(false);
@@ -55,8 +62,8 @@ export default function Dashboard({ requests }) {
   };
   // แปลงจาก yyyy-mm-dd (ของ input date) เป็น วัน/เดือน/ปี ให้อ่านง่ายแบบไทย
   const formattedDate = date ? date.split('-').reverse().join('/') : '';
-  const dayRequests = requests.filter((item) => item.receivedAt?.slice(0, 10) === date);
-  const completed = requests.filter((item) => item.completedAt?.slice(0, 10) === date && item.status === 'เรียบร้อยปกติ');
+  const dayRequests = requests.filter((item) => toBangkokDate(item.receivedAt) === date);
+  const completed = requests.filter((item) => toBangkokDate(item.completedAt) === date && item.status === 'เรียบร้อยปกติ');
   const dayGroups = groupedTypeCount(dayRequests);
   const completedGroups = groupedTypeCount(completed);
 
