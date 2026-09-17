@@ -399,16 +399,6 @@ body {
   vertical-align: -3px;
 }
 
-/* แสดงโลโก้ "Service Desk" ค้างไว้ใน topbar เสมอ ไม่ใช่แค่ตอนจอมือถือ (เดิม .mobile-brand ถูกซ่อนบนจอกว้าง) */
-.topbar {
-  justify-content: space-between;
-}
-
-.mobile-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
 .sidebar.collapsed .side-foot {
   justify-content: center;
