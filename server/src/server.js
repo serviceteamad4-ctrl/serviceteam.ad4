@@ -24,12 +24,22 @@ const normalizeOrigin = (value) => String(value || '').replace(/\/+$/, '');
 // ซึ่งหมายถึงเวลาตามนาฬิกาไทย (Asia/Bangkok, UTC+7) เสมอ ไม่ใช่เวลาของเครื่อง/โซนของเซิร์ฟเวอร์
 // ถ้าปล่อยให้ new Date(value) เดาเอง จะยึด timezone ของเซิร์ฟเวอร์ที่รันจริง (บน Render คือ UTC)
 // ทำให้เวลาที่บันทึกเพี้ยนไป 7 ชั่วโมงจากที่ผู้ใช้กรอกจริง จึงต้องแปลงเป็น UTC ให้ตรงกับ Asia/Bangkok เอง
+//
+// แต่บาง field (เช่น receivedAt ของงานใหม่) ฝั่ง frontend ส่ง new Date().toISOString() มาตรงๆ
+// ซึ่งเป็น UTC ที่ถูกต้องอยู่แล้ว (มี "Z"/offset ต่อท้าย) ต้องไม่เอาไปลบ 7 ชั่วโมงซ้ำอีกที
+// เช็คก่อนว่ามี timezone designator ต่อท้ายเวลาหรือไม่ ถ้ามีแล้วให้ผ่านไปตรงๆ ไม่ต้องปรับ
 const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
 const bangkokInputToISOString = (value) => {
   if (!value) return null;
-  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  const stringValue = String(value);
+  const hasTimezoneDesignator = /(Z|[+-]\d{2}:?\d{2})$/.test(stringValue);
+  if (hasTimezoneDesignator) {
+    const asIs = new Date(stringValue);
+    return Number.isNaN(asIs.getTime()) ? null : asIs.toISOString();
+  }
+  const match = stringValue.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
   if (!match) {
-    const fallback = new Date(value);
+    const fallback = new Date(stringValue);
     return Number.isNaN(fallback.getTime()) ? null : fallback.toISOString();
   }
   const parts = match.slice(1).map(Number);
