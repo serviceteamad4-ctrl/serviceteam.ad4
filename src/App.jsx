@@ -14,7 +14,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
 // ลำดับสถานะที่ต้องแสดง "รับเรื่อง" มาก่อนเสมอ ใช้ทั้งจัดเรียงก่อนแบ่งหน้าและจัดกลุ่มในตาราง
 // เพื่อไม่ให้การแบ่งหน้าตัดกลุ่มสถานะเดียวกันขาดออกจากกันแบบสุ่มตามวันที่
-const STATUS_ORDER = ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด', 'รออะไหล่', 'รอเสนอราคา', 'เรียบร้อยปกติ', 'ยกเลิก'];
+const STATUS_ORDER = ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด', 'รออะไหล่', 'รอเสนอราคา', 'รอจัดคิวช่าง', 'เรียบร้อยปกติ', 'ยกเลิก'];
 const statusRank = (status) => {
   const index = STATUS_ORDER.indexOf(status);
   return index === -1 ? STATUS_ORDER.length : index;
@@ -674,8 +674,12 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
 
   return (
     <section className="view active-view" style={{ paddingTop: '16px' }}>
-      <div className="page-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
-        <button className="primary-btn ui-button" onClick={onAdd}><span>+</span> เพิ่มงานใหม่</button>
+      <div className="page-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+        <label className="search-box" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 0', minWidth: '0', height: '42px', border: '1px solid #dfe6e4', borderRadius: '14px', background: '#fff', padding: '0 10px 0 8px', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>
+          <span className="field-icon" aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', border: '1px solid #dfe6e4', borderRadius: '8px', background: '#f7faf9', color: '#6f7f7d', fontSize: '14px', flexShrink: 0, lineHeight: 1 }}>⌕</span>
+          <input type="search" placeholder="ค้นหาลูกค้า เลขติดตาม สถานที่..." value={query} onChange={(event) => setQuery(event.target.value)} style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', flex: '1', font: 'inherit', color: '#18242b', padding: 0, margin: 0 }} />
+        </label>
+        <button className="primary-btn ui-button" onClick={onAdd} style={{ flexShrink: 0 }}><span>+</span> เพิ่มงานใหม่</button>
       </div>
 
       {!compact && (
@@ -695,10 +699,6 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
             else input.focus();
           }} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', border: '1px solid #dfe6e4', borderRadius: '8px', background: '#f7faf9', color: '#6f7f7d', fontSize: '14px', flexShrink: 0, lineHeight: 1, padding: 0, cursor: 'pointer' }}>📆</button>
           <input ref={monthInputRef} type="month" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', minWidth: 0, flex: '1', font: 'inherit', color: '#18242b', padding: 0, margin: 0, cursor: 'pointer' }} />
-        </label>
-        <label className="search-box" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 0', minWidth: '0', width: '100%', height: '42px', border: '1px solid #dfe6e4', borderRadius: '14px', background: '#fff', padding: '0 10px 0 8px', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>
-          <span className="field-icon" aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', border: '1px solid #dfe6e4', borderRadius: '8px', background: '#f7faf9', color: '#6f7f7d', fontSize: '14px', flexShrink: 0, lineHeight: 1 }}>⌕</span>
-          <input type="search" placeholder="ค้นหาลูกค้า เลขติดตาม สถานที่..." value={query} onChange={(event) => setQuery(event.target.value)} style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', flex: '1', font: 'inherit', color: '#18242b', padding: 0, margin: 0 }} />
         </label>
         <select value={status} onChange={(event) => setStatus(event.target.value)} style={{ minWidth: '170px', flex: '0 0 170px', height: '42px', borderRadius: '14px', border: '1px solid #dfe6e4', padding: '0 12px', background: '#fff', color: '#18242b', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>
           <option>ทั้งหมด</option>
