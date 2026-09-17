@@ -557,7 +557,6 @@ function App() {
         <header className="topbar">
           <div className="mobile-brand">
             <img className="brand-mark" src={mascotLogo} alt="Service Desk" />
-            <strong>Service Desk</strong>
           </div>
           <div className="top-actions">
             <span>{requests.length} รายการ</span>
