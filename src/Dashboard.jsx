@@ -2,17 +2,19 @@ import { useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 
 const normalizeJobType = (value) => {
-  const text = String(value || '').trim().toLowerCase();
+  // ข้อมูลบางแถวพิมพ์ "แ" เป็น "เ" สองตัวติดกัน (เเก้ไขสื่อ) ให้รวมเป็นตัวเดียวก่อนเทียบ
+  const text = String(value || '').trim().toLowerCase().replace(/เเ/g, 'แ');
 
   if (!text) return 'งานแจ้งซ่อม';
   if (['เทรน', 'training', 'อบรม'].some((label) => text.includes(label.toLowerCase()))) {
     return 'งานเทรน';
   }
-  if (['งานขึ้นสื่อ', 'งานส่งสื่อ', 'ขึ้นสื่อ', 'ส่งสื่อ', 'สื่อ'].some((label) => text.includes(label.toLowerCase()))) {
-    return 'งานส่งสื่อ';
-  }
+  // ต้องเช็ค "แก้ไขสื่อ" ก่อนกลุ่มส่งสื่อ เพราะกลุ่มส่งสื่อมีคำกว้างๆ อย่าง 'สื่อ' ซึ่งจะดูดงานแก้ไขสื่อไปนับเป็นส่งสื่อหมด
   if (['งานแก้ไขสื่อ', 'แก้ไขสื่อ'].some((label) => text.includes(label.toLowerCase()))) {
     return 'งานแก้ไขสื่อ';
+  }
+  if (['งานขึ้นสื่อ', 'งานส่งสื่อ', 'ขึ้นสื่อ', 'ส่งสื่อ', 'สื่อ'].some((label) => text.includes(label.toLowerCase()))) {
+    return 'งานส่งสื่อ';
   }
   return 'งานแจ้งซ่อม';
 };
