@@ -9,6 +9,7 @@ import { getStoredDropdownData, addDropdownValue, removeDropdownValue } from './
 import { dateFields as filterDateFields, filterFieldLabels } from './FilterPanel.jsx';
 import { isViewableImageUrl } from './requestUtils.js';
 import mascotLogo from './assets/mascot-dog.jpg';
+import LinePendingImages from './LinePendingImages.jsx';
 
 // ตัด "/" ท้ายออก กัน URL ซ้อนกัน (เช่น "https://api.example.com/" + "/api/requests" จะกลายเป็น "...com//api/requests" ซึ่ง 404)
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
@@ -348,6 +349,46 @@ function App() {
     loadRequests();
   }, []);
 
+  // งานที่แจ้งเข้ามาผ่านกลุ่ม LINE แล้วแนบรูปมาหลายรูป รอให้เลือกว่าจะใช้รูปไหน
+  const [linePending, setLinePending] = useState([]);
+  const [linePendingOpen, setLinePendingOpen] = useState(false);
+
+  useEffect(() => {
+    if (!API_BASE_URL) return undefined;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/line/pending-images`);
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!cancelled) setLinePending(data);
+      } catch {
+        // เงียบไว้ ไม่ต้องรบกวนผู้ใช้ด้วย error ของการโพลระยะสั้นแบบนี้ รอบถัดไปค่อยลองใหม่
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 20000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleChooseLineImage = async (pendingId, url) => {
+    await fetch(`${API_BASE_URL}/api/line/pending-images/${pendingId}/choose`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    setLinePending((prev) => prev.filter((item) => item.id !== pendingId));
+    setRequests(await readRequests());
+  };
+
+  const handleSkipLineImage = async (pendingId) => {
+    await fetch(`${API_BASE_URL}/api/line/pending-images/${pendingId}`, { method: 'DELETE' });
+    setLinePending((prev) => prev.filter((item) => item.id !== pendingId));
+  };
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 250);
     return () => clearTimeout(timer);
@@ -574,10 +615,24 @@ function App() {
       <main className="main-content">
         <header className="topbar">
           <div className="top-actions">
+            {linePending.length > 0 && (
+              <button type="button" className="secondary-btn" onClick={() => setLinePendingOpen(true)}>
+                🔔 เลือกรูปจาก LINE ({linePending.length})
+              </button>
+            )}
             <span>{requests.length} รายการ</span>
             <button className="avatar">A</button>
           </div>
         </header>
+
+        {linePendingOpen && (
+          <LinePendingImages
+            items={linePending}
+            onChoose={handleChooseLineImage}
+            onSkip={handleSkipLineImage}
+            onClose={() => setLinePendingOpen(false)}
+          />
+        )}
 
         {view === 'requests' ? (
           editing ? (

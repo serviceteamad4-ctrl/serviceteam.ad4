@@ -3,6 +3,8 @@ import express from 'express';
 import cors from 'cors';
 import { supabase } from './supabase.js';
 import { storeImage, removeImage, UPLOAD_DIR } from './storage.js';
+import { runMigrations } from './migrate.js';
+import { lineRouter } from './line.js';
 
 const app = express();
 // Render (และ reverse proxy อื่นๆ) เชื่อม TLS เข้ามาแล้วส่งต่อเป็น http ภายใน
@@ -66,8 +68,16 @@ app.use(cors({
   credentials: true,
 }));
 // รูป 10 MB เมื่อเข้ารหัส base64 จะโตขึ้น ~33% จึงต้องเผื่อ limit ให้มากกว่า
-app.use(express.json({ limit: '25mb' }));
+// verify: เก็บ raw body ไว้ใน req.rawBody ด้วย เพราะ webhook ของ LINE ต้องเอา body ดิบไปคำนวณลายเซ็น
+// เทียบกับ header x-line-signature ถ้าใช้ req.body (parse แล้ว) ไปคำนวณใหม่ ไบต์จะไม่ตรงกับที่ LINE เซ็นมา
+app.use(express.json({
+  limit: '25mb',
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 app.use('/api/uploads', express.static(UPLOAD_DIR, { maxAge: '1y' }));
+app.use('/api/line', lineRouter);
 
 app.get('/', (_req, res) => {
   res.json({
@@ -282,6 +292,12 @@ app.post('/api/upload', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Service desk API listening on http://localhost:${PORT}`);
-});
+// รัน migration (CREATE TABLE IF NOT EXISTS) ทุกครั้งที่ start ปลอดภัยเพราะ idempotent
+// ถ้าพังก็แค่ log ไว้ ไม่ปล่อยให้ทั้งเซิร์ฟเวอร์ start ไม่ขึ้นเพราะ migration เดียว
+runMigrations()
+  .catch((error) => console.error('Migration failed on startup:', error))
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log(`Service desk API listening on http://localhost:${PORT}`);
+    });
+  });
