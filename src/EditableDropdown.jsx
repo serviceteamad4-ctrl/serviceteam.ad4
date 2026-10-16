@@ -19,6 +19,16 @@ export default function EditableDropdown({ name, label, value, options = [], onC
     onChange({ target: { name, value: next.join(', ') } });
   };
 
+  // เปิดดรอปดาวน์: ถ้าเป็นช่องเลือกค่าเดียว ต้องเอาค่าที่มีอยู่แล้วมาใส่ในช่องพิมพ์ด้วย
+  // ไม่งั้นพอคลิกช่องที่มีค่าอยู่แล้ว ค่าจะถูกแทนที่ด้วยค่าว่างทันที (inputValue เริ่มที่ '' เสมอ)
+  // ทำให้แก้ไข/ก๊อปปี้ข้อความเดิมไม่ได้ ต้องพิมพ์ใหม่หมดทุกครั้ง
+  const openDropdown = () => {
+    setIsOpen(true);
+    if (!multiple) {
+      setInputValue(value || '');
+    }
+  };
+
   const handleSelect = (option) => {
     if (multiple) {
       toggleMultiValue(option);
@@ -81,8 +91,8 @@ export default function EditableDropdown({ name, label, value, options = [], onC
                 setInputValue(e.target.value);
               }
             }}
-            onClick={() => setIsOpen(true)}
-            onFocus={() => setIsOpen(true)}
+            onClick={openDropdown}
+            onFocus={openDropdown}
             onKeyDown={handleKeyDown}
             placeholder={isOpen ? (multiple ? 'ค้นหาหรือพิมพ์ชื่อคนใหม่ (เลือกได้หลายคน)...' : 'ค้นหาหรือพิมพ์ค่าใหม่...') : 'เลือก...'}
             style={{ flex: 1 }}
