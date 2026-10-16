@@ -15,6 +15,13 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      # ต้องตั้งเองใน Render dashboard เสมอ (sync: false ไม่ได้เติมค่าให้อัตโนมัติ แค่บอกว่าต้องมี)
+      - key: DATABASE_URL
+        sync: false
+      - key: LINE_CHANNEL_SECRET
+        sync: false
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false
 
   - type: web
     name: serviceteam-frontend
