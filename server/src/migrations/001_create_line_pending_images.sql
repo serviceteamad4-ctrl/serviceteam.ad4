@@ -3,7 +3,7 @@
 -- เก็บเป็นตาราง DB (ไม่ใช่แค่ในหน่วยความจำ) เพราะ Render free tier เคย sleep/restart ระหว่างรอได้
 CREATE TABLE IF NOT EXISTS line_pending_images (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  request_id uuid NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+  request_id text NOT NULL REFERENCES requests(id) ON DELETE CASCADE, -- requests.id เป็นชนิด text ไม่ใช่ uuid
   ticket text,
   images jsonb NOT NULL, -- [{ "url": "https://...", "messageId": "..." }, ...] อัปโหลดขึ้น storage ไว้แล้วทุกรูป
   source_group_id text,
