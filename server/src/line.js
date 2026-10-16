@@ -133,8 +133,10 @@ const finalizePending = async (groupKey) => {
       });
     }
     console.log(`LINE: created request ${request.ticket} (${pending.images.length} image(s))`);
+    recordHit({ created: request.ticket, images: pending.images.length });
   } catch (error) {
     console.error('LINE: failed to finalize pending request', error);
+    recordHit({ finalizeError: error?.message || JSON.stringify(error) });
   }
 };
 
@@ -175,14 +177,35 @@ const handleImageMessage = async (groupKey, messageId, accessToken, requestOrigi
 
 export const lineRouter = express.Router();
 
+// เก็บประวัติ webhook ล่าสุดไว้ดูผ่าน GET /api/line/debug เพราะดู log บน Render ไม่ได้
+// ไม่เก็บค่าความลับหรือเนื้อหาข้อความเต็ม
+const recentHits = [];
+const recordHit = (entry) => {
+  recentHits.unshift({ at: new Date().toISOString(), ...entry });
+  recentHits.length = Math.min(recentHits.length, 20);
+};
+
 // ต้องอ่าน raw body (req.rawBody, capture ไว้ตอน express.json() ใน server.js) มาคำนวณลายเซ็นเทียบกับ
 // header x-line-signature ถ้าไม่ตรง แปลว่าไม่ได้มาจาก LINE จริง ปฏิเสธทันที
 lineRouter.post('/webhook', async (req, res) => {
-  const channelSecret = process.env.LINE_CHANNEL_SECRET;
-  const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  // trim กันช่องว่าง/ขึ้นบรรทัดที่ติดมาตอนวางค่าใน Render dashboard
+  const channelSecret = (process.env.LINE_CHANNEL_SECRET || '').trim();
+  const accessToken = (process.env.LINE_CHANNEL_ACCESS_TOKEN || '').trim();
   const signature = req.get('x-line-signature');
 
-  if (!verifySignature(req.rawBody, signature, channelSecret)) {
+  const signatureOk = verifySignature(req.rawBody, signature, channelSecret);
+  recordHit({
+    signatureOk,
+    hasSignatureHeader: Boolean(signature),
+    events: (req.body?.events || []).map((e) => ({
+      type: e.type,
+      messageType: e.message?.type,
+      sourceType: e.source?.type,
+      startsWithTrigger: e.message?.type === 'text' ? String(e.message.text || '').trim().startsWith(TRIGGER_WORD) : undefined,
+    })),
+  });
+
+  if (!signatureOk) {
     return res.status(401).json({ message: 'Invalid signature' });
   }
 
@@ -202,6 +225,15 @@ lineRouter.post('/webhook', async (req, res) => {
       await handleImageMessage(groupKey, event.message.id, accessToken, requestOrigin);
     }
   }
+});
+
+// ใช้ตรวจว่า LINE ยิง webhook มาถึงไหม และลายเซ็นผ่านไหม (บอกแค่ความยาวค่าความลับ ไม่บอกค่าจริง)
+lineRouter.get('/debug', (_req, res) => {
+  res.json({
+    secretLength: (process.env.LINE_CHANNEL_SECRET || '').trim().length,
+    tokenLength: (process.env.LINE_CHANNEL_ACCESS_TOKEN || '').trim().length,
+    recentHits,
+  });
 });
 
 // รายการงานที่รอเลือกรูป (มีรูปแนบมากกว่า 1 รูปตอนแจ้งเปิดงานผ่าน LINE)
