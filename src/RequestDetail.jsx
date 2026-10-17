@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { formatDate, isViewableImageUrl } from './requestUtils.js';
 
 // จัดกลุ่มฟิลด์เป็นหมวดหมู่ให้อ่านง่ายขึ้น แทนการแสดงเรียงยาวทีละรายการ
@@ -42,6 +43,13 @@ const isMissingImageValue = (key, value) => IMAGE_KEYS.includes(key) && typeof v
 
 export default function RequestDetail({ request, onBack, onEdit, onDelete, embedded = false }) {
   const [lightboxImage, setLightboxImage] = useState(null);
+
+  useEffect(() => {
+    if (!lightboxImage) return undefined;
+    const closeOnEscape = (event) => event.key === 'Escape' && setLightboxImage(null);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [lightboxImage]);
 
   return (
     <section className={embedded ? 'detail-embedded' : 'detail-page view active-view'}>
@@ -96,24 +104,34 @@ export default function RequestDetail({ request, onBack, onEdit, onDelete, embed
         })}
       </div>
 
-      {lightboxImage && (
-        <div className="modal" onClick={(event) => event.target === event.currentTarget && setLightboxImage(null)}>
-          <div style={{ position: 'relative', maxWidth: '92vw', maxHeight: '92vh' }}>
-            <button
-              type="button"
-              className="icon-btn"
-              onClick={() => setLightboxImage(null)}
-              style={{ position: 'absolute', top: '-44px', right: 0, color: '#fff' }}
-            >
-              ×
-            </button>
-            <img
-              src={lightboxImage}
-              alt="ภาพขยาย"
-              style={{ display: 'block', maxWidth: '92vw', maxHeight: '92vh', borderRadius: '8px' }}
-            />
-          </div>
-        </div>
+      {/* ใช้ portal ไปไว้ที่ body: แผงรายละเอียดด้านขวามี transform (animation เลื่อนเข้า) ทำให้
+          position: fixed ของลูกถูกขังอยู่ในกรอบแผง รูปเลยไม่ขึ้นกลางจอและปุ่มปิดถูกตัดหาย */}
+      {lightboxImage && createPortal(
+        <div
+          className="modal"
+          onClick={(event) => event.target === event.currentTarget && setLightboxImage(null)}
+          style={{ background: 'rgba(10, 14, 30, 0.82)', zIndex: 1000 }}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxImage(null)}
+            aria-label="ปิดรูป"
+            title="ปิด (Esc)"
+            style={{
+              position: 'fixed', top: '18px', right: '18px', width: '44px', height: '44px',
+              borderRadius: '50%', border: 'none', background: '#fff', color: '#18242b',
+              fontSize: '26px', lineHeight: 1, cursor: 'pointer', boxShadow: '0 4px 14px rgba(0,0,0,0.35)',
+            }}
+          >
+            ×
+          </button>
+          <img
+            src={lightboxImage}
+            alt="ภาพขยาย"
+            style={{ display: 'block', maxWidth: '90vw', maxHeight: '88vh', borderRadius: '8px', boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }}
+          />
+        </div>,
+        document.body,
       )}
     </section>
   );
