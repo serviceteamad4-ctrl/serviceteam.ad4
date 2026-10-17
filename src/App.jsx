@@ -98,19 +98,15 @@ const toDateTimeLocalValue = (value) => {
   return `${parts.year}-${parts.month}-${parts.day}T${hour}:${parts.minute}`;
 };
 
-const monthKeyFromValue = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  const year = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric' }).format(date);
-  const month = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', month: '2-digit' }).format(date);
-  return `${year}-${month}`;
-};
+// formatter ตัวเดียวใช้ร่วมกัน: สร้างใหม่ทุกแถวกับงาน 6,000+ แถว ช้าเกือบ 1 วินาทีต่อการกรอง
+const bangkokDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' });
+
+// "YYYY-MM-DD" แบบ en-CA ตัดเอา 7 ตัวแรกได้ "YYYY-MM"
+const monthKeyFromValue = (value) => (value ? bangkokDateFormatter.format(new Date(value)).slice(0, 7) : '');
 
 // ค่าที่เก็บเป็น UTC ISO string การตัด 10 ตัวแรกตรงๆ จะได้วันที่ตาม UTC ไม่ใช่ตามเวลาไทย
 // ทำให้ตัวกรองช่วงวันที่พลาดงานที่รับแจ้ง/เสร็จช่วงเที่ยงคืน-ตี 6 ของไทย (ซึ่ง UTC ยังเป็นวันก่อนหน้า)
-const toBangkokDateKey = (value) => value
-  ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value))
-  : '';
+const toBangkokDateKey = (value) => (value ? bangkokDateFormatter.format(new Date(value)) : '');
 
 // "เสนอราคา" กับ "รอเสนอราคา" คือสถานะเดียวกัน รวมให้เหลือชื่อเดียวเพื่อไม่ให้งานกระจายเป็นสองกลุ่ม
 const STATUS_ALIASES = { 'เสนอราคา': 'รอเสนอราคา' };
@@ -318,10 +314,19 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState(loadTheme);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // ลากเลือกสีจะยิงเปลี่ยนค่าหลายสิบครั้งต่อวินาที เปลี่ยนสีบนจอทันที แต่บันทึกลงเบราว์เซอร์
+  // ตอนหยุดลากแล้ว (ถ้ามีรูปพื้นหลัง การเขียนทุกครั้งหนักหลายร้อย KB)
+  const themeSaveTimer = useRef(null);
   // คืน false ถ้าเก็บลงเบราว์เซอร์ไม่ได้ (เช่นรูปพื้นหลังใหญ่เกิน) จะไม่เปลี่ยนธีม
   const updateTheme = (changes) => {
     const next = { ...theme, ...changes };
-    if (!saveTheme(next)) return false;
+    clearTimeout(themeSaveTimer.current);
+    if ('backgroundImage' in changes) {
+      // รูปต้องบันทึกทันที จะได้รู้ว่าใหญ่เกินที่เก็บไหม
+      if (!saveTheme(next)) return false;
+    } else {
+      themeSaveTimer.current = setTimeout(() => saveTheme(next), 400);
+    }
     setTheme(next);
     return true;
   };

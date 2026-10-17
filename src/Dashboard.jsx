@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 
 const normalizeJobType = (value) => {
@@ -35,9 +35,10 @@ const todayInBangkok = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/
 // receivedAt/completedAt เก็บเป็น UTC ISO string การตัด 10 ตัวแรก (.slice(0,10)) จะได้ "วันที่ตาม UTC"
 // ไม่ใช่วันที่ตามเวลาไทย งานที่รับแจ้งช่วงเที่ยงคืน-ตี 6 ของไทย (ซึ่งยังเป็น UTC วันก่อนหน้า) จะถูกนับตกหล่นไปวันก่อน
 // ต้องแปลงเป็นวันที่ตาม Asia/Bangkok ก่อนเทียบเสมอ
-const toBangkokDate = (isoValue) => isoValue
-  ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(isoValue))
-  : '';
+// ใช้ formatter ตัวเดียวร่วมกัน: สร้าง Intl.DateTimeFormat ใหม่ทุกครั้งกับงาน 6,000+ แถว
+// ใช้เวลาเกือบ 1 วินาทีต่อการ render ทำให้หน้าค้าง (เช่นตอนลากเลือกสีในหน้าตั้งค่า)
+const bangkokDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' });
+const toBangkokDate = (isoValue) => (isoValue ? bangkokDateFormatter.format(new Date(isoValue)) : '');
 
 export default function Dashboard({ requests }) {
   const [date, setDate] = useState(todayInBangkok);
@@ -64,8 +65,12 @@ export default function Dashboard({ requests }) {
   };
   // แปลงจาก yyyy-mm-dd (ของ input date) เป็น วัน/เดือน/ปี ให้อ่านง่ายแบบไทย
   const formattedDate = date ? date.split('-').reverse().join('/') : '';
-  const dayRequests = requests.filter((item) => toBangkokDate(item.receivedAt) === date);
-  const completed = requests.filter((item) => toBangkokDate(item.completedAt) === date && item.status === 'เรียบร้อยปกติ');
+  // คำนวณใหม่เฉพาะตอนข้อมูลงานหรือวันที่เปลี่ยน ไม่ใช่ทุกครั้งที่หน้า render (เช่นเปลี่ยนสีธีม)
+  const dayRequests = useMemo(() => requests.filter((item) => toBangkokDate(item.receivedAt) === date), [requests, date]);
+  const completed = useMemo(
+    () => requests.filter((item) => item.status === 'เรียบร้อยปกติ' && toBangkokDate(item.completedAt) === date),
+    [requests, date],
+  );
   const dayGroups = groupedTypeCount(dayRequests);
   const completedGroups = groupedTypeCount(completed);
 
