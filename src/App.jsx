@@ -10,6 +10,7 @@ import { dateFields as filterDateFields, filterFieldLabels } from './FilterPanel
 import { isViewableImageUrl } from './requestUtils.js';
 import mascotLogo from './assets/mascot-dog.jpg';
 import LinePendingImages from './LinePendingImages.jsx';
+import LinePendingCloses from './LinePendingCloses.jsx';
 
 // ตัด "/" ท้ายออก กัน URL ซ้อนกัน (เช่น "https://api.example.com/" + "/api/requests" จะกลายเป็น "...com//api/requests" ซึ่ง 404)
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
@@ -358,26 +359,53 @@ function App() {
   const [linePendingRequestId, setLinePendingRequestId] = useState(null);
   const pendingImageIds = useMemo(() => new Set(linePending.map((item) => item.request_id)), [linePending]);
 
+  // "แจ้งปิดงาน" ที่ลูกค้า+สถานที่ซ้ำกันหลายงาน รอเลือกว่าจะปิดงานไหน
+  const [linePendingCloses, setLinePendingCloses] = useState([]);
+  const [linePendingClosesOpen, setLinePendingClosesOpen] = useState(false);
+  const [linePendingCloseRequestId, setLinePendingCloseRequestId] = useState(null);
+  const pendingCloseIds = useMemo(
+    () => new Set(linePendingCloses.flatMap((item) => item.candidates.map((job) => job.id))),
+    [linePendingCloses],
+  );
+
+  const refreshLineQueues = async () => {
+    if (!API_BASE_URL) return;
+    try {
+      const [imagesResponse, closesResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/line/pending-images`),
+        fetch(`${API_BASE_URL}/api/line/pending-closes`),
+      ]);
+      if (imagesResponse.ok) setLinePending(await imagesResponse.json());
+      if (closesResponse.ok) setLinePendingCloses(await closesResponse.json());
+    } catch {
+      // เงียบไว้ ไม่ต้องรบกวนผู้ใช้ด้วย error ของการโพลระยะสั้นแบบนี้ รอบถัดไปค่อยลองใหม่
+    }
+  };
+
   useEffect(() => {
-    if (!API_BASE_URL) return undefined;
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/line/pending-images`);
-        if (!response.ok) return;
-        const data = await response.json();
-        if (!cancelled) setLinePending(data);
-      } catch {
-        // เงียบไว้ ไม่ต้องรบกวนผู้ใช้ด้วย error ของการโพลระยะสั้นแบบนี้ รอบถัดไปค่อยลองใหม่
-      }
-    };
-    poll();
-    const interval = setInterval(poll, 20000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    refreshLineQueues();
+    const interval = setInterval(refreshLineQueues, 20000);
+    return () => clearInterval(interval);
   }, []);
+
+  const handleChooseLineClose = async (pendingId, requestId) => {
+    await fetch(`${API_BASE_URL}/api/line/pending-closes/${pendingId}/choose`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId }),
+    });
+    setLinePendingCloses((prev) => prev.filter((item) => item.id !== pendingId));
+    if (linePendingCloseRequestId) setLinePendingClosesOpen(false);
+    // เลือกปิดแล้วถ้ามีรูปหลายรูป จะกลายเป็นรายการรอเลือกรูป ต้องดึงใหม่
+    await refreshLineQueues();
+    setRequests(await readRequests());
+  };
+
+  const handleDismissLineClose = async (pendingId) => {
+    await fetch(`${API_BASE_URL}/api/line/pending-closes/${pendingId}`, { method: 'DELETE' });
+    setLinePendingCloses((prev) => prev.filter((item) => item.id !== pendingId));
+    if (linePendingCloseRequestId) setLinePendingClosesOpen(false);
+  };
 
   const handleChooseLineImage = async (pendingId, url) => {
     await fetch(`${API_BASE_URL}/api/line/pending-images/${pendingId}/choose`, {
@@ -627,6 +655,11 @@ function App() {
                 🔔 เลือกรูปจาก LINE ({linePending.length})
               </button>
             )}
+            {linePendingCloses.length > 0 && (
+              <button type="button" className="secondary-btn" onClick={() => { setLinePendingCloseRequestId(null); setLinePendingClosesOpen(true); }}>
+                🔔 เลือกงานที่จะปิดจาก LINE ({linePendingCloses.length})
+              </button>
+            )}
             <span>{requests.length} รายการ</span>
             <button className="avatar">A</button>
           </div>
@@ -638,6 +671,17 @@ function App() {
             onChoose={handleChooseLineImage}
             onSkip={handleSkipLineImage}
             onClose={() => setLinePendingOpen(false)}
+          />
+        )}
+
+        {linePendingClosesOpen && (
+          <LinePendingCloses
+            items={linePendingCloseRequestId
+              ? linePendingCloses.filter((item) => item.candidates.some((job) => job.id === linePendingCloseRequestId))
+              : linePendingCloses}
+            onChoose={handleChooseLineClose}
+            onDismiss={handleDismissLineClose}
+            onClose={() => setLinePendingClosesOpen(false)}
           />
         )}
 
@@ -659,6 +703,8 @@ function App() {
                 <RequestsView
                   pendingImageIds={pendingImageIds}
                   onOpenPendingImages={(requestId) => { setLinePendingRequestId(requestId); setLinePendingOpen(true); }}
+                  pendingCloseIds={pendingCloseIds}
+                  onOpenPendingCloses={(requestId) => { setLinePendingCloseRequestId(requestId); setLinePendingClosesOpen(true); }}
                   compact={Boolean(selectedRequest)}
                   selectedId={selectedRequest?.id}
                   onView={(request) => setSelectedRequest(request)}
@@ -729,7 +775,7 @@ const formatChipDate = (value) => {
   return d && m && y ? `${d}/${m}/${y}` : value;
 };
 
-function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, advancedFilters, setAdvancedFilters, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error, scrollRestoreRef, highlightId, onHighlightExpire, compact = false, selectedId = null, pendingImageIds = null, onOpenPendingImages = () => {} }) {
+function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, advancedFilters, setAdvancedFilters, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error, scrollRestoreRef, highlightId, onHighlightExpire, compact = false, selectedId = null, pendingImageIds = null, onOpenPendingImages = () => {}, pendingCloseIds = null, onOpenPendingCloses = () => {} }) {
   const monthInputRef = useRef(null);
 
   // กลับมาหน้ารายการแล้วเลื่อนไปตำแหน่งเดิมที่เคยอยู่ก่อนกดดู/แก้ไขงาน แทนที่จะเริ่มจากบนสุดใหม่
@@ -871,6 +917,16 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
                             style={{ marginRight: '6px', padding: '1px 6px', border: '1px solid #f1c75b', borderRadius: '999px', background: '#fff6dc', color: '#8a6a12', fontSize: '11px', cursor: 'pointer', verticalAlign: 'middle' }}
                           >
                             🖼️ เลือกรูป
+                          </button>
+                        )}
+                        {pendingCloseIds?.has(request.id) && (
+                          <button
+                            type="button"
+                            title="มีแจ้งปิดงานจาก LINE ที่ลูกค้า+สถานที่ตรงกับหลายงาน รอเลือกว่าจะปิดงานไหน"
+                            onClick={(event) => { event.stopPropagation(); onOpenPendingCloses(request.id); }}
+                            style={{ marginRight: '6px', padding: '1px 6px', border: '1px solid #f0a38f', borderRadius: '999px', background: '#fdece7', color: '#a1452d', fontSize: '11px', cursor: 'pointer', verticalAlign: 'middle' }}
+                          >
+                            ✅ เลือกปิด?
                           </button>
                         )}
                         {request.ticket || '-'}

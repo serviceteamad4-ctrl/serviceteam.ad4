@@ -98,6 +98,12 @@ export const parseLineMessage = (text) => {
 
   const fields = {};
   for (const line of lines.slice(1)) {
+    // "เลข 006189" / "เลขที่งาน: MAR006189" (ใช้ระบุงานตอนแจ้งปิดงาน มีหรือไม่มี : ก็ได้)
+    const ticketMatch = line.match(/^(?:เลขที่งาน|เลขงาน|เลขที่|เลข)\s*[:：]?\s*([A-Za-z]*\d+)$/);
+    if (ticketMatch) {
+      fields.ticket = ticketMatch[1];
+      continue;
+    }
     const match = line.match(/^([^:：]+)[:：]\s*(.*)$/);
     if (!match) continue;
     const label = match[1].trim();
@@ -182,8 +188,8 @@ const createRequestFromFields = async (fields) => {
   return data;
 };
 
-// หางานที่ยังไม่ปิดของลูกค้า (+ สถานที่ ถ้าระบุมา) ถ้ามีหลายงาน เลือกงานที่แจ้งเข้ามาล่าสุด
-const findOpenRequest = async (fields) => {
+// งานที่ยังไม่ปิดทั้งหมดของลูกค้า (+ สถานที่ ถ้าระบุมา) เรียงจากแจ้งล่าสุด
+const findOpenRequests = async (fields) => {
   const { data, error } = await supabase
     .from('requests')
     .select('id, ticket, customer, location, receivedAt')
@@ -193,28 +199,74 @@ const findOpenRequest = async (fields) => {
 
   const customer = normalizeText(fields.customer);
   const location = normalizeText(fields.location);
-  return data.find((row) => normalizeText(row.customer) === customer
-    && (!location || normalizeText(row.location) === location)) || null;
+  return data.filter((row) => normalizeText(row.customer) === customer
+    && (!location || normalizeText(row.location) === location));
 };
 
-const closeRequestFromFields = async (fields) => {
+export const applyClose = async (requestId, fields, completedAt) => {
+  const updates = { status: 'เรียบร้อยปกติ', completedAt };
+  if (fields.assignee) updates.assignee = fields.assignee;
+  if (fields.action) updates.action = fields.action;
+  const { error } = await supabase.from('requests').update(updates).eq('id', requestId);
+  if (error) throw error;
+};
+
+// คืนค่า { request } = ปิดแล้ว, { pendingCloseId } = เจอหลายงาน พักให้เลือกในเว็บ, null = ปิดไม่ได้
+const closeRequestFromFields = async (fields, groupKey) => {
+  const completedAt = new Date().toISOString();
+
+  // ระบุเลขงานมา = ปิดงานนั้นตรงๆ ไม่ต้องเทียบลูกค้า/สถานที่
+  if (fields.ticket) {
+    const { request, reason } = await findRequestByTicket(fields.ticket);
+    if (!request) {
+      recordHit({ closeSkipped: reason, ticket: fields.ticket });
+      return null;
+    }
+    await applyClose(request.id, fields, completedAt);
+    return { request };
+  }
+
   if (!fields.customer) {
-    recordHit({ closeSkipped: 'missing ลูกค้า' });
+    recordHit({ closeSkipped: 'missing ลูกค้า and เลข' });
     return null;
   }
-  const request = await findOpenRequest(fields);
-  if (!request) {
+  const matches = await findOpenRequests(fields);
+  if (matches.length === 0) {
     recordHit({ closeSkipped: 'no open job found', customer: fields.customer, location: fields.location || null });
     return null;
   }
+  if (matches.length === 1) {
+    await applyClose(matches[0].id, fields, completedAt);
+    return { request: matches[0] };
+  }
 
-  const updates = { status: 'เรียบร้อยปกติ', completedAt: new Date().toISOString() };
-  if (fields.assignee) updates.assignee = fields.assignee;
-  if (fields.action) updates.action = fields.action;
-
-  const { error } = await supabase.from('requests').update(updates).eq('id', request.id);
+  // ลูกค้า+สถานที่ซ้ำกันหลายงาน ไม่เดาเอง
+  const { data, error } = await supabase
+    .from('line_pending_closes')
+    .insert({
+      candidate_ids: matches.map((m) => m.id),
+      fields: { customer: fields.customer, location: fields.location || null, assignee: fields.assignee || null, action: fields.action || null },
+      completed_at: completedAt,
+      source_group_id: groupKey,
+    })
+    .select('id')
+    .single();
   if (error) throw error;
-  return request;
+  recordHit({ closePending: data.id, candidates: matches.map((m) => m.ticket) });
+  return { pendingCloseId: data.id };
+};
+
+// รูปที่พักไว้กับ "แจ้งปิดงาน" ที่รอเลือกงาน: เลือกงานแล้วค่อยใส่ (1 รูป = ใส่เลย, หลายรูป = ไปคิวเลือกรูป)
+export const attachImagesToRequest = async (request, field, images, sourceGroupId) => {
+  if (images.length === 1) {
+    const { error } = await supabase.from('requests').update({ [field]: images[0].url }).eq('id', request.id);
+    if (error) throw error;
+  } else if (images.length > 1) {
+    const { error } = await supabase
+      .from('line_pending_images')
+      .insert({ request_id: request.id, ticket: request.ticket, field, images, source_group_id: sourceGroupId });
+    if (error) throw error;
+  }
 };
 
 // รับได้ทั้งเลขเต็ม (MAR006189) และเลขท้าย 6 หลักอย่างเดียว (006189) ไม่สนตัวพิมพ์ใหญ่เล็ก
@@ -270,11 +322,17 @@ const handleTextMessage = async (groupKey, text) => {
   }
 
   if (parsed.kind === 'close') {
-    const request = await closeRequestFromFields(parsed.fields);
-    if (!request) {
+    const result = await closeRequestFromFields(parsed.fields, groupKey);
+    if (!result) {
       activeByGroup.delete(groupKey); // ไม่ให้รูปที่ตามมาไปติดงานก่อนหน้าโดยไม่ตั้งใจ
       return;
     }
+    if (result.pendingCloseId) {
+      // ยังไม่รู้ว่าปิดงานไหน รูปที่ตามมาเก็บไว้กับรายการรอเลือกก่อน
+      activeByGroup.set(groupKey, { pendingCloseId: result.pendingCloseId, images: [], expiresAt: Date.now() + IMAGE_WINDOW_MS });
+      return;
+    }
+    const { request } = result;
     activeByGroup.set(groupKey, {
       requestId: request.id,
       ticket: request.ticket,
@@ -315,6 +373,13 @@ const handleImageMessage = async (groupKey, messageId, accessToken, requestOrigi
   const buffer = await downloadLineImage(messageId, accessToken);
   const url = await storeImage('service-desk-images', buffer, `${messageId}.jpg`, requestOrigin);
   active.images.push({ url, messageId });
+
+  if (active.pendingCloseId) {
+    const { error } = await supabase.from('line_pending_closes').update({ images: active.images }).eq('id', active.pendingCloseId);
+    if (error) throw error;
+    recordHit({ heldImageForPendingClose: active.pendingCloseId, imageCount: active.images.length });
+    return;
+  }
 
   if (active.images.length === 1) {
     const { error } = await supabase.from('requests').update({ [active.field]: url }).eq('id', active.requestId);
@@ -468,5 +533,79 @@ lineRouter.delete('/pending-images/:id', async (req, res) => {
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ message: 'Failed to skip pending images', error: String(error) });
+  }
+});
+
+// "แจ้งปิดงาน" ที่ลูกค้า+สถานที่ซ้ำกันหลายงาน รอให้คนเลือกว่าจะปิดงานไหน
+lineRouter.get('/pending-closes', async (_req, res) => {
+  try {
+    const { data: pendings, error } = await supabase
+      .from('line_pending_closes')
+      .select('*')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+
+    const ids = [...new Set(pendings.flatMap((p) => p.candidate_ids))];
+    const { data: jobs, error: jobsError } = ids.length
+      ? await supabase.from('requests').select('id, ticket, customer, location, description, status, receivedAt').in('id', ids)
+      : { data: [], error: null };
+    if (jobsError) throw jobsError;
+    const jobById = new Map(jobs.map((job) => [job.id, job]));
+
+    res.json(pendings.map((p) => ({
+      ...p,
+      // งานที่ถูกปิด/ลบไปแล้วระหว่างรอ ไม่ต้องให้เลือก
+      candidates: p.candidate_ids.map((id) => jobById.get(id)).filter((job) => job && !DONE_STATUSES.includes(job.status)),
+    })));
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch pending closes', error: error?.message || String(error) });
+  }
+});
+
+lineRouter.post('/pending-closes/:id/choose', async (req, res) => {
+  try {
+    const { data: pending, error: fetchError } = await supabase
+      .from('line_pending_closes')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!pending) return res.status(404).json({ message: 'Pending close not found' });
+
+    const requestId = req.body?.requestId;
+    if (!pending.candidate_ids.includes(requestId)) {
+      return res.status(400).json({ message: 'requestId must be one of the candidates' });
+    }
+    const { data: request, error: requestError } = await supabase.from('requests').select('id, ticket').eq('id', requestId).single();
+    if (requestError) throw requestError;
+
+    await applyClose(request.id, pending.fields, pending.completed_at);
+    await attachImagesToRequest(request, 'completedImage', pending.images, pending.source_group_id);
+
+    const { error: deleteError } = await supabase.from('line_pending_closes').delete().eq('id', pending.id);
+    if (deleteError) throw deleteError;
+    res.json({ ok: true, ticket: request.ticket });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to close chosen job', error: error?.message || String(error) });
+  }
+});
+
+// ไม่ปิดงานไหนเลย (เช่น แจ้งมาผิด) ทิ้งรายการนี้และรูปที่พักไว้
+lineRouter.delete('/pending-closes/:id', async (req, res) => {
+  try {
+    const { data: pending, error: fetchError } = await supabase
+      .from('line_pending_closes')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!pending) return res.status(404).json({ message: 'Pending close not found' });
+
+    await Promise.all(pending.images.map((img) => removeImage('service-desk-images', img.url)));
+    const { error: deleteError } = await supabase.from('line_pending_closes').delete().eq('id', pending.id);
+    if (deleteError) throw deleteError;
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to dismiss pending close', error: error?.message || String(error) });
   }
 });
