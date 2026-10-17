@@ -34,7 +34,7 @@ const normalizeText = (text) => String(text || '').replace(/ /g, ' ').replace(/
 // (เลือกรูปจากมือถือมักใช้เวลาหลายสิบวินาที รอสั้นๆ ไม่พอ)
 const IMAGE_WINDOW_MS = 60 * 1000;
 
-// key: groupId (หรือ userId ถ้าทักมาเดี่ยวๆ) -> งานล่าสุดที่เปิด/ปิดจากกลุ่มนั้น
+// key: "<groupId>:<userId>" (คนส่งในกลุ่มนั้น) -> งานล่าสุดที่คนนั้นแจ้งเปิด/ปิด
 // { requestId, ticket, field: 'image' | 'completedImage', images: [{url, messageId}], pendingId, expiresAt }
 const activeByGroup = new Map();
 
@@ -225,7 +225,7 @@ const handleImageMessage = async (groupKey, messageId, accessToken, requestOrigi
   const active = activeByGroup.get(groupKey);
   if (!active || Date.now() > active.expiresAt) {
     // รูปที่ส่งคุยกันทั่วไป ไม่ได้ตามหลังการแจ้งเปิด/ปิดงาน ไม่ต้องโหลดเก็บ
-    recordHit({ imageIgnored: 'no แจ้งเปิดงาน/แจ้งปิดงาน from this group in the last minute' });
+    recordHit({ imageIgnored: 'no แจ้งเปิดงาน/แจ้งปิดงาน from this sender in the last minute' });
     return;
   }
 
@@ -294,13 +294,16 @@ lineRouter.post('/webhook', async (req, res) => {
   const events = req.body?.events || [];
 
   for (const event of events) {
-    const groupKey = event.source?.groupId || event.source?.roomId || event.source?.userId;
-    if (!groupKey) continue;
+    const chatKey = event.source?.groupId || event.source?.roomId || event.source?.userId;
+    if (!chatKey) continue;
+    // ผูกงานกับ "คนส่ง + กลุ่ม" ไม่ใช่แค่กลุ่ม: รูปจะติดกับงานก็ต่อเมื่อคนที่ส่ง
+    // แจ้งเปิด/ปิดงานเป็นคนส่งรูปเอง กันกรณีเพื่อนในกลุ่มส่งรูปอื่นแทรกเข้ามาใน 1 นาทีนั้น
+    const senderKey = `${chatKey}:${event.source?.userId || ''}`;
 
     if (event.type === 'message' && event.message?.type === 'text') {
-      runInGroupOrder(groupKey, () => handleTextMessage(groupKey, event.message.text));
+      runInGroupOrder(senderKey, () => handleTextMessage(senderKey, event.message.text));
     } else if (event.type === 'message' && event.message?.type === 'image') {
-      runInGroupOrder(groupKey, () => handleImageMessage(groupKey, event.message.id, accessToken, requestOrigin));
+      runInGroupOrder(senderKey, () => handleImageMessage(senderKey, event.message.id, accessToken, requestOrigin));
     }
   }
 });
