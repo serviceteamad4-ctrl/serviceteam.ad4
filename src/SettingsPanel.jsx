@@ -160,6 +160,24 @@ export default function SettingsPanel({ theme, onChange, onClose }) {
             <span style={{ fontSize: '12px', color: '#18242b', minWidth: '40px', textAlign: 'right' }}>{theme.fontScale || 100}%</span>
           </div>
         </div>
+        <div style={rowStyle}>
+          <span style={labelStyle}>ความทึบของกล่องเนื้อหา</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {theme.panelOpacity && theme.panelOpacity !== 100 && (
+              <button type="button" style={resetStyle} onClick={() => onChange({ panelOpacity: null })}>ค่าเริ่มต้น</button>
+            )}
+            <input
+              type="range"
+              min="10"
+              max="100"
+              step="5"
+              value={theme.panelOpacity || 100}
+              onChange={(event) => onChange({ panelOpacity: Number(event.target.value) })}
+              style={{ width: '160px', cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: '12px', color: '#18242b', minWidth: '40px', textAlign: 'right' }}>{theme.panelOpacity || 100}%</span>
+          </div>
+        </div>
         <FillRow label="สีช่องกรอก (ค้นหา เดือน สถานะ)" field="inputColor" theme={theme} onChange={onChange} />
         <ColorRow label="สีหัวคอลัมน์ตาราง (ลูกค้า อ้างอิง ...)" field="tableHeadTextColor" theme={theme} onChange={onChange} />
         <ColorRow label="สีเส้นขอบ (กรอบกล่อง เส้นในตาราง)" field="borderColor" theme={theme} onChange={onChange} />

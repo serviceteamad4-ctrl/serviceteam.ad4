@@ -16,6 +16,7 @@ export const DEFAULT_THEME = {
   fontScale: null, // ตัวเลข % เช่น 120, null = 100
   tableHeadTextColor: null,
   inputColor: null,
+  panelOpacity: null, // % ความทึบของกล่องเนื้อหา null = 100 (ทึบ)
 };
 
 // ค่าที่โชว์ในตัวเลือกสีตอนยังไม่ได้ตั้ง (ตรงกับสีเดิมใน modern-ui.css / styles.css)
@@ -52,6 +53,19 @@ export const gradientMix = (value) => (typeof value?.mix === 'number' ? value.mi
 export const toCssFill = (value) => (isGradient(value)
   ? `linear-gradient(${value.angle}deg, ${value.from}, ${gradientMix(value)}%, ${value.to})`
   : value);
+
+// ใส่ความโปร่งใสให้สี (ทั้งสีเดียวและไล่สี) เช่น #ffffff + 0.6 -> rgba(255, 255, 255, 0.6)
+const hexToRgba = (hex, alpha) => {
+  const value = String(hex).replace('#', '');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(value.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+const withAlpha = (fill, alpha) => {
+  if (alpha >= 1) return fill;
+  return isGradient(fill)
+    ? { ...fill, from: hexToRgba(fill.from, alpha), to: hexToRgba(fill.to, alpha) }
+    : hexToRgba(fill, alpha);
+};
 
 export const luminanceOf = (hex) => {
   const value = String(hex).replace('#', '');
@@ -127,8 +141,10 @@ export const buildThemeCss = (theme) => {
   if (theme.topbarColor) {
     rules.push(`.topbar { background: ${toCssFill(theme.topbarColor)} !important; backdrop-filter: none !important; }`);
   }
-  if (theme.panelColor) {
-    rules.push(`.ui-toolbar, .metric, .table-wrap, .detail-card, .requests-split-detail { background: ${toCssFill(theme.panelColor)} !important; backdrop-filter: none !important; }`);
+  const panelOpacity = theme.panelOpacity && theme.panelOpacity < 100 ? theme.panelOpacity / 100 : 1;
+  if (theme.panelColor || panelOpacity < 1) {
+    const fill = withAlpha(theme.panelColor || THEME_FALLBACKS.panelColor, panelOpacity);
+    rules.push(`.ui-toolbar, .metric, .table-wrap, .detail-card, .requests-split-detail { background: ${toCssFill(fill)} !important; backdrop-filter: none !important; }`);
     // แถบหัวกลุ่มสถานะ/หัวคอลัมน์ในตาราง: ใช้สีเทาโปร่งทับสีกล่อง ให้ต่างจากแถวข้อมูลนิดหน่อย
     // ไม่งั้นแถบยังเป็นสีอ่อนเดิม แล้วตัวหนังสือสีอ่อนที่ตั้งไว้จะมองไม่เห็น
     rules.push(':root { --table-group-bg: rgba(128, 128, 128, 0.18); --table-head-bg: rgba(128, 128, 128, 0.1); }');
