@@ -103,24 +103,28 @@ app.get('/api/health', async (_req, res) => {
 
 app.get('/api/requests', async (_req, res) => {
   try {
+    // Supabase คืนได้ครั้งละ 1000 แถว และเซิร์ฟเวอร์ (Render, สหรัฐฯ) กับฐานข้อมูล (เกาหลี) อยู่ไกลกัน
+    // ดึงทีละหน้าต่อกันใช้เวลา ~6 วินาที จึงนับจำนวนก่อนแล้วยิงทุกหน้าพร้อมกัน
     const PAGE_SIZE = 1000;
-    const all = [];
-    let from = 0;
+    const { count, error: countError } = await supabase
+      .from('requests')
+      .select('id', { count: 'exact', head: true });
+    if (countError) throw countError;
 
-    while (true) {
+    const pageStarts = Array.from({ length: Math.ceil((count || 0) / PAGE_SIZE) }, (_, i) => i * PAGE_SIZE);
+    const pages = await Promise.all(pageStarts.map(async (from) => {
       const { data, error } = await supabase
         .from('requests')
         .select(REQUEST_COLUMNS.join(','))
+        // id เป็นตัวตัดสินลำดับรอง กันแถวที่ receivedAt เท่ากันสลับหน้า (หลุด/ซ้ำ) ระหว่างยิงหลายหน้าพร้อมกัน
         .order('receivedAt', { ascending: false })
+        .order('id', { ascending: true })
         .range(from, from + PAGE_SIZE - 1);
-
       if (error) throw error;
-      all.push(...data);
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
+      return data;
+    }));
 
-    res.json(all);
+    res.json(pages.flat());
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch requests', error: String(error) });
   }
