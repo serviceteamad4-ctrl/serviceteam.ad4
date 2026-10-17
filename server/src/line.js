@@ -3,13 +3,15 @@ import express from 'express';
 import { supabase } from './supabase.js';
 import { storeImage, removeImage } from './storage.js';
 
-// ข้อความ LINE ต้องขึ้นต้นด้วยคำนี้ก่อน ถึงจะถือว่าเป็นการแจ้งเปิดงานใหม่
+// ข้อความ LINE ต้องขึ้นต้นด้วยคำเหล่านี้ ถึงจะถือว่าเป็นคำสั่ง
 // (กันไม่ให้ข้อความคุยเล่นทั่วไปในกลุ่มถูกตีความเป็นงานโดยไม่ตั้งใจ)
 const TRIGGER_WORD = 'แจ้งเปิดงาน';
+const CLOSE_TRIGGER_WORD = 'แจ้งปิดงาน';
 
 // รองรับหลายคำสะกดของแต่ละ label เผื่อพนักงานพิมพ์ไม่ตรงเป๊ะ
 const LABEL_TO_FIELD = {
   'ลูกค้า': 'customer',
+  'ชื่อลูกค้า': 'customer',
   'สถานที่': 'location',
   'สถานที่/สาขา': 'location',
   'สาขา': 'location',
@@ -18,14 +20,22 @@ const LABEL_TO_FIELD = {
   'เบอร์ติดต่อ': 'phone',
   'เบอร์โทร': 'phone',
   'ปัญหา': 'description',
+  'ผู้ดำเนินการ': 'assignee',
+  'การดำเนินการ': 'action',
+  'รายละเอียดการดำเนินการ': 'action',
 };
+
+const DONE_STATUSES = ['เรียบร้อยปกติ', 'ยกเลิก'];
+
+// เทียบชื่อลูกค้า/สถานที่แบบไม่สนตัวพิมพ์ใหญ่เล็กและช่องว่างเกิน (รวม non-breaking space จาก Excel)
+const normalizeText = (text) => String(text || '').replace(/ /g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
 
 // สร้างงานทันทีที่ได้ข้อความ "แจ้งเปิดงาน" แล้วรูปที่ส่งตามมาในกลุ่มเดียวกันภายในเวลานี้จะติดไปกับงานนั้น
 // (เลือกรูปจากมือถือมักใช้เวลาหลายสิบวินาที รอสั้นๆ ไม่พอ)
 const IMAGE_WINDOW_MS = 60 * 1000;
 
-// key: groupId (หรือ userId ถ้าทักมาเดี่ยวๆ) -> งานล่าสุดที่เปิดจากกลุ่มนั้น
-// { requestId, ticket, images: [{url, messageId}], pendingId, expiresAt }
+// key: groupId (หรือ userId ถ้าทักมาเดี่ยวๆ) -> งานล่าสุดที่เปิด/ปิดจากกลุ่มนั้น
+// { requestId, ticket, field: 'image' | 'completedImage', images: [{url, messageId}], pendingId, expiresAt }
 const activeByGroup = new Map();
 
 // LINE ส่งแต่ละรูปเป็นคนละ webhook ซึ่งอาจมาซ้อนกัน ต้องประมวลผลทีละอันต่อกลุ่ม
@@ -42,10 +52,15 @@ const runInGroupOrder = (groupKey, task) => {
   return next;
 };
 
+// คืนค่า { kind: 'open' | 'close', fields } หรือ null ถ้าไม่ใช่คำสั่ง
 export const parseLineMessage = (text) => {
   const lines = String(text || '').split('\n').map((line) => line.trim()).filter(Boolean);
   if (lines.length === 0) return null;
-  if (!lines[0].startsWith(TRIGGER_WORD)) return null;
+
+  let kind = null;
+  if (lines[0].startsWith(TRIGGER_WORD)) kind = 'open';
+  else if (lines[0].startsWith(CLOSE_TRIGGER_WORD)) kind = 'close';
+  if (!kind) return null;
 
   const fields = {};
   for (const line of lines.slice(1)) {
@@ -58,7 +73,7 @@ export const parseLineMessage = (text) => {
       fields[field] = value;
     }
   }
-  return fields;
+  return { kind, fields };
 };
 
 const verifySignature = (rawBody, signature, channelSecret) => {
@@ -120,6 +135,8 @@ const createRequestFromFields = async (fields) => {
       contact: fields.contact || null,
       phone: fields.phone || null,
       description: fields.description || null,
+      assignee: fields.assignee || null,
+      action: fields.action || null,
       status: 'รับเรื่อง',
       ma: 'N',
       receivedAt: new Date().toISOString(),
@@ -130,14 +147,69 @@ const createRequestFromFields = async (fields) => {
   return data;
 };
 
-const handleTextMessage = async (groupKey, text) => {
-  const fields = parseLineMessage(text);
-  if (!fields) return; // ไม่ขึ้นต้นด้วยคำ trigger ถือเป็นข้อความคุยเล่นทั่วไป ไม่สนใจ
+// หางานที่ยังไม่ปิดของลูกค้า (+ สถานที่ ถ้าระบุมา) ถ้ามีหลายงาน เลือกงานที่แจ้งเข้ามาล่าสุด
+const findOpenRequest = async (fields) => {
+  const { data, error } = await supabase
+    .from('requests')
+    .select('id, ticket, customer, location, receivedAt')
+    .not('status', 'in', `(${DONE_STATUSES.map((s) => `"${s}"`).join(',')})`)
+    .order('receivedAt', { ascending: false });
+  if (error) throw error;
 
-  const request = await createRequestFromFields(fields);
+  const customer = normalizeText(fields.customer);
+  const location = normalizeText(fields.location);
+  return data.find((row) => normalizeText(row.customer) === customer
+    && (!location || normalizeText(row.location) === location)) || null;
+};
+
+const closeRequestFromFields = async (fields) => {
+  if (!fields.customer) {
+    recordHit({ closeSkipped: 'missing ลูกค้า' });
+    return null;
+  }
+  const request = await findOpenRequest(fields);
+  if (!request) {
+    recordHit({ closeSkipped: 'no open job found', customer: fields.customer, location: fields.location || null });
+    return null;
+  }
+
+  const updates = { status: 'เรียบร้อยปกติ', completedAt: new Date().toISOString() };
+  if (fields.assignee) updates.assignee = fields.assignee;
+  if (fields.action) updates.action = fields.action;
+
+  const { error } = await supabase.from('requests').update(updates).eq('id', request.id);
+  if (error) throw error;
+  return request;
+};
+
+const handleTextMessage = async (groupKey, text) => {
+  const parsed = parseLineMessage(text);
+  if (!parsed) return; // ไม่ขึ้นต้นด้วยคำ trigger ถือเป็นข้อความคุยเล่นทั่วไป ไม่สนใจ
+
+  if (parsed.kind === 'close') {
+    const request = await closeRequestFromFields(parsed.fields);
+    if (!request) {
+      activeByGroup.delete(groupKey); // ไม่ให้รูปที่ตามมาไปติดงานก่อนหน้าโดยไม่ตั้งใจ
+      return;
+    }
+    activeByGroup.set(groupKey, {
+      requestId: request.id,
+      ticket: request.ticket,
+      field: 'completedImage',
+      images: [],
+      pendingId: null,
+      expiresAt: Date.now() + IMAGE_WINDOW_MS,
+    });
+    console.log(`LINE: closed request ${request.ticket}`);
+    recordHit({ closed: request.ticket });
+    return;
+  }
+
+  const request = await createRequestFromFields(parsed.fields);
   activeByGroup.set(groupKey, {
     requestId: request.id,
     ticket: request.ticket,
+    field: 'image',
     images: [],
     pendingId: null,
     expiresAt: Date.now() + IMAGE_WINDOW_MS,
@@ -146,13 +218,14 @@ const handleTextMessage = async (groupKey, text) => {
   recordHit({ created: request.ticket });
 };
 
-// รูปที่ส่งตามมาหลัง "แจ้งเปิดงาน": รูปแรกใส่ให้งานเลย ถ้ามีรูปที่ 2 ขึ้นไป ไม่เดาเอง
-// ถอดรูปออกจากงานแล้วย้ายทุกรูปไปพักใน line_pending_images ให้คนเลือกในหน้าเว็บ
+// รูปที่ส่งตามมาหลัง "แจ้งเปิดงาน" (-> รูปที่แจ้ง) หรือ "แจ้งปิดงาน" (-> รูปงานเสร็จ):
+// รูปแรกใส่ให้งานเลย ถ้ามีรูปที่ 2 ขึ้นไป ไม่เดาเอง ถอดรูปออกแล้วย้ายทุกรูปไปพักใน
+// line_pending_images ให้คนเลือกในหน้าเว็บ
 const handleImageMessage = async (groupKey, messageId, accessToken, requestOrigin) => {
   const active = activeByGroup.get(groupKey);
   if (!active || Date.now() > active.expiresAt) {
-    // รูปที่ส่งคุยกันทั่วไป ไม่ได้ตามหลังการแจ้งเปิดงาน ไม่ต้องโหลดเก็บ
-    recordHit({ imageIgnored: 'no แจ้งเปิดงาน from this group in the last minute' });
+    // รูปที่ส่งคุยกันทั่วไป ไม่ได้ตามหลังการแจ้งเปิด/ปิดงาน ไม่ต้องโหลดเก็บ
+    recordHit({ imageIgnored: 'no แจ้งเปิดงาน/แจ้งปิดงาน from this group in the last minute' });
     return;
   }
 
@@ -161,14 +234,14 @@ const handleImageMessage = async (groupKey, messageId, accessToken, requestOrigi
   active.images.push({ url, messageId });
 
   if (active.images.length === 1) {
-    const { error } = await supabase.from('requests').update({ image: url }).eq('id', active.requestId);
+    const { error } = await supabase.from('requests').update({ [active.field]: url }).eq('id', active.requestId);
     if (error) throw error;
   } else if (!active.pendingId) {
-    const { error: clearError } = await supabase.from('requests').update({ image: null }).eq('id', active.requestId);
+    const { error: clearError } = await supabase.from('requests').update({ [active.field]: null }).eq('id', active.requestId);
     if (clearError) throw clearError;
     const { data, error } = await supabase
       .from('line_pending_images')
-      .insert({ request_id: active.requestId, ticket: active.ticket, images: active.images, source_group_id: groupKey })
+      .insert({ request_id: active.requestId, ticket: active.ticket, field: active.field, images: active.images, source_group_id: groupKey })
       .select('id')
       .single();
     if (error) throw error;
@@ -206,7 +279,7 @@ lineRouter.post('/webhook', async (req, res) => {
       type: e.type,
       messageType: e.message?.type,
       sourceType: e.source?.type,
-      startsWithTrigger: e.message?.type === 'text' ? String(e.message.text || '').trim().startsWith(TRIGGER_WORD) : undefined,
+      command: e.message?.type === 'text' ? (parseLineMessage(e.message.text)?.kind || 'none') : undefined,
     })),
   });
 
@@ -246,7 +319,7 @@ lineRouter.get('/pending-images', async (_req, res) => {
   try {
     const { data, error } = await supabase
       .from('line_pending_images')
-      .select('id, request_id, ticket, images, created_at, requests(customer, location, description)')
+      .select('id, request_id, ticket, field, images, created_at, requests(customer, location, description)')
       .order('created_at', { ascending: true });
     if (error) throw error;
     res.json(data);
@@ -273,7 +346,7 @@ lineRouter.post('/pending-images/:id/choose', async (req, res) => {
 
     const { error: updateError } = await supabase
       .from('requests')
-      .update({ image: chosenUrl })
+      .update({ [pending.field || 'image']: chosenUrl })
       .eq('id', pending.request_id);
     if (updateError) throw updateError;
 

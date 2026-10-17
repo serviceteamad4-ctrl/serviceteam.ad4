@@ -16,6 +16,7 @@ export default function LinePendingImages({ items, onChoose, onSkip, onClose }) 
             <div key={item.id} style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid #eef1ef' }}>
               <strong style={{ display: 'block', marginBottom: '4px' }}>
                 {item.ticket} — {item.requests?.customer || '-'} ({item.requests?.location || '-'})
+                {' · '}{item.field === 'completedImage' ? 'รูปงานเสร็จ' : 'รูปที่แจ้ง'}
               </strong>
               {item.requests?.description && (
                 <p style={{ margin: '0 0 10px', color: '#718087', fontSize: '13px' }}>{item.requests.description}</p>
