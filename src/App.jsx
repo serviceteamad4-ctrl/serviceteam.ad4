@@ -910,25 +910,25 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
 
       {!isLoading && !error && (
         <>
-          <div className="table-wrap ui-card" style={{ background: '#fff', border: '1px solid #e4e9e8', borderRadius: '18px', overflow: 'hidden', marginBottom: '12px', boxShadow: '0 12px 32px rgba(24, 36, 43, 0.05)' }}>
+          <div className="table-wrap ui-card" style={{ background: '#fff', border: '1px solid var(--line-color, #e4e9e8)', borderRadius: '18px', overflow: 'hidden', marginBottom: '12px', boxShadow: '0 12px 32px rgba(24, 36, 43, 0.05)' }}>
             {groupedStatuses.length === 0 ? (
               <div style={{ padding: '28px 20px', color: '#718087' }}>ไม่มีงานในเงื่อนไขนี้</div>
             ) : groupedStatuses.map((group) => (
-              <div key={group.status} style={{ borderBottom: '1px solid #eef1ef' }}>
-                <div style={{ background: 'var(--table-group-bg, linear-gradient(135deg, #f4f9f9 0%, #eef3f3 100%))', padding: '10px 14px', fontSize: '14px', fontWeight: 600, color: 'var(--ink)', borderBottom: '1px solid #e4e9e8' }}>
+              <div key={group.status} style={{ borderBottom: '1px solid var(--line-color, #eef1ef)' }}>
+                <div style={{ background: 'var(--table-group-bg, linear-gradient(135deg, #f4f9f9 0%, #eef3f3 100%))', padding: '10px 14px', fontSize: '14px', fontWeight: 600, color: 'var(--ink)', borderBottom: '1px solid var(--line-color, #e4e9e8)' }}>
                   {group.status}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: compact ? '1.4fr 1.2fr 1.4fr' : '1.3fr 0.8fr 1.3fr 1.7fr 1.2fr 0.8fr', fontSize: '12px', color: 'var(--ink)' }}>
                   {(compact ? ['ลูกค้า', 'เลขติดตาม', 'สถานที่/สาขา'] : ['ลูกค้า', 'อ้างอิง', 'เลขติดตาม', 'สถานที่/สาขา', 'ผู้ดำเนินการ', 'จัดการ']).map((label) => (
-                    <div key={label} style={{ padding: '8px 10px', background: 'var(--table-head-bg, #f7f8fc)', borderBottom: '1px solid #dfe3ee', borderRight: '1px solid #eef1ef', fontWeight: 700, color: 'var(--table-head-text, #59627a)' }}>{label}</div>
+                    <div key={label} style={{ padding: '8px 10px', background: 'var(--table-head-bg, #f7f8fc)', borderBottom: '1px solid var(--line-color, #dfe3ee)', borderRight: '1px solid var(--line-color, #eef1ef)', fontWeight: 700, color: 'var(--table-head-text, #59627a)' }}>{label}</div>
                   ))}
                   {group.items.map((request) => {
                     const rowHighlight = {
                       backgroundColor: request.id === selectedId ? '#e7f1fb' : request.id === highlightId ? '#fff4d6' : 'transparent',
                       transition: 'background-color 1.2s ease',
                     };
-                    const cellStyle = { padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight };
+                    const cellStyle = { padding: '10px 10px', borderBottom: '1px solid var(--line-color, #eef1ef)', borderRight: '1px solid var(--line-color, #eef1ef)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight };
                     // งานที่แจ้งผ่าน LINE แล้วมีรูปหลายรูปรอเลือก: มีสัญลักษณ์ที่ช่องเลขที่งาน กดแล้วเปิดหน้าเลือกรูปของงานนี้
                     const ticketCell = (
                       <div style={cellStyle} onClick={() => onView(request)}>
@@ -969,7 +969,7 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
                           {ticketCell}
                           <div style={cellStyle} onClick={() => onView(request)}>{request.location || '—'}</div>
                           <div style={cellStyle} onClick={() => onView(request)}>{request.assignee || '—'}</div>
-                          <div style={{ padding: '8px 8px', borderBottom: '1px solid #eef1ef', display: 'flex', alignItems: 'center', justifyContent: 'center', ...rowHighlight }}>
+                          <div style={{ padding: '8px 8px', borderBottom: '1px solid var(--line-color, #eef1ef)', display: 'flex', alignItems: 'center', justifyContent: 'center', ...rowHighlight }}>
                             <button type="button" className="secondary-btn" onClick={(event) => { event.stopPropagation(); onEdit(request); }}>แก้ไข</button>
                           </div>
                         </>

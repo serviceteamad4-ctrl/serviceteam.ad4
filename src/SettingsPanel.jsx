@@ -142,6 +142,27 @@ export default function SettingsPanel({ theme, onChange, onClose }) {
         </div>
         {imageError && <p style={{ color: '#c0392b', fontSize: '13px', margin: '6px 0 0' }}>{imageError}</p>}
         <ColorRow label="สีตัวหนังสือ" field="textColor" theme={theme} onChange={onChange} />
+        <div style={rowStyle}>
+          <span style={labelStyle}>ขนาดตัวหนังสือ</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {theme.fontScale && theme.fontScale !== 100 && (
+              <button type="button" style={resetStyle} onClick={() => onChange({ fontScale: null })}>ค่าเริ่มต้น</button>
+            )}
+            <input
+              type="range"
+              min="80"
+              max="150"
+              step="10"
+              value={theme.fontScale || 100}
+              onChange={(event) => onChange({ fontScale: Number(event.target.value) })}
+              style={{ width: '160px', cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: '12px', color: '#18242b', minWidth: '40px', textAlign: 'right' }}>{theme.fontScale || 100}%</span>
+          </div>
+        </div>
+        <FillRow label="สีช่องกรอก (ค้นหา เดือน สถานะ)" field="inputColor" theme={theme} onChange={onChange} />
+        <ColorRow label="สีหัวคอลัมน์ตาราง (ลูกค้า อ้างอิง ...)" field="tableHeadTextColor" theme={theme} onChange={onChange} />
+        <ColorRow label="สีเส้นขอบ (กรอบกล่อง เส้นในตาราง)" field="borderColor" theme={theme} onChange={onChange} />
 
         <h3 style={{ margin: '18px 0 0', fontSize: '13px', color: '#087f75' }}>ปุ่มกด</h3>
         <FillRow label="สีปุ่มหลัก (เพิ่มงานใหม่ บันทึก)" field="primaryButtonColor" theme={theme} onChange={onChange} />

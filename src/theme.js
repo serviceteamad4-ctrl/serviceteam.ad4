@@ -12,6 +12,10 @@ export const DEFAULT_THEME = {
   panelColor: null,
   primaryButtonColor: null,
   secondaryButtonColor: null,
+  borderColor: null,
+  fontScale: null, // ตัวเลข % เช่น 120, null = 100
+  tableHeadTextColor: null,
+  inputColor: null,
 };
 
 // ค่าที่โชว์ในตัวเลือกสีตอนยังไม่ได้ตั้ง (ตรงกับสีเดิมใน modern-ui.css / styles.css)
@@ -24,11 +28,14 @@ export const THEME_FALLBACKS = {
   panelColor: '#ffffff',
   primaryButtonColor: '#5b5ce2',
   secondaryButtonColor: '#ffffff',
+  borderColor: '#e4e9e8',
+  tableHeadTextColor: '#59627a',
+  inputColor: '#ffffff',
 };
 
 // ช่องที่เป็น "พื้น" เลือกได้ทั้งสีเดียว ("#rrggbb") หรือไล่สี ({ from, to, angle })
 // ส่วนสีตัวหนังสือเป็นสีเดียวเสมอ
-export const FILL_FIELDS = ['sidebarColor', 'topbarColor', 'pageColor', 'panelColor', 'primaryButtonColor', 'secondaryButtonColor'];
+export const FILL_FIELDS = ['sidebarColor', 'topbarColor', 'pageColor', 'panelColor', 'primaryButtonColor', 'secondaryButtonColor', 'inputColor'];
 
 export const GRADIENT_DIRECTIONS = [
   { angle: 90, label: 'ซ้าย → ขวา' },
@@ -85,6 +92,23 @@ export const buildThemeCss = (theme) => {
   if (theme.textColor) {
     rules.push(`:root { --ink: ${theme.textColor}; --modern-text: ${theme.textColor}; }`);
     rules.push(`body, .main-content, .page-heading h1, .metric strong { color: ${theme.textColor}; }`);
+    // หัวคอลัมน์ตารางเดิมเป็นสีเทาตายตัว บนพื้นเข้มมองไม่เห็น ให้ตามสีตัวหนังสือไปด้วย
+    rules.push(`:root { --table-head-text: ${theme.textColor}; }`);
+  }
+  if (theme.textColor) {
+    // ป้ายบนการ์ดสรุป ("งานทั้งหมดในหน้านี้" ฯลฯ) เดิมเป็นสีเทาจาง ให้ตามสีตัวหนังสือแบบจางลงนิดหน่อย
+    rules.push(`.metric label { color: ${theme.textColor} !important; opacity: 0.8; }`);
+  }
+  if (theme.inputColor) {
+    // ช่องค้นหา ช่องเดือน ช่องสถานะ (สีขาวตั้งไว้ในโค้ดตรงๆ) ตัวหนังสือในช่องตัดกับพื้นช่องเสมอ
+    const inputText = readableTextOn(theme.inputColor);
+    rules.push(`.search-box, .ui-toolbar select { background: ${toCssFill(theme.inputColor)} !important; }`);
+    rules.push(`.search-box input, .ui-toolbar select, .search-box input::placeholder { color: ${inputText} !important; }`);
+    rules.push(`.ui-toolbar select option { color: #18242b; background: #fff; }`);
+    if (inputText === '#ffffff') rules.push('.search-box input[type="month"] { color-scheme: dark; }');
+  }
+  if (theme.tableHeadTextColor) {
+    rules.push(`:root { --table-head-text: ${theme.tableHeadTextColor}; }`);
   }
   if (theme.sidebarColor) {
     rules.push(`.sidebar { background: ${toCssFill(theme.sidebarColor)} !important; }`);
@@ -107,13 +131,27 @@ export const buildThemeCss = (theme) => {
     rules.push(`.ui-toolbar, .metric, .table-wrap, .detail-card, .requests-split-detail { background: ${toCssFill(theme.panelColor)} !important; backdrop-filter: none !important; }`);
     // แถบหัวกลุ่มสถานะ/หัวคอลัมน์ในตาราง: ใช้สีเทาโปร่งทับสีกล่อง ให้ต่างจากแถวข้อมูลนิดหน่อย
     // ไม่งั้นแถบยังเป็นสีอ่อนเดิม แล้วตัวหนังสือสีอ่อนที่ตั้งไว้จะมองไม่เห็น
-    rules.push(':root { --table-group-bg: rgba(128, 128, 128, 0.18); --table-head-bg: rgba(128, 128, 128, 0.1); --table-head-text: inherit; }');
+    rules.push(':root { --table-group-bg: rgba(128, 128, 128, 0.18); --table-head-bg: rgba(128, 128, 128, 0.1); }');
   }
   if (theme.primaryButtonColor) {
     rules.push(`.primary-btn { background: ${toCssFill(theme.primaryButtonColor)} !important; color: ${readableTextOn(theme.primaryButtonColor)} !important; box-shadow: none !important; }`);
   }
   if (theme.secondaryButtonColor) {
     rules.push(`.secondary-btn { background: ${toCssFill(theme.secondaryButtonColor)} !important; color: ${readableTextOn(theme.secondaryButtonColor)} !important; }`);
+  } else if (theme.textColor) {
+    // ปุ่มรองยังเป็นพื้นขาวเดิม แต่ตัวหนังสือในปุ่มใช้สีตัวหนังสือที่ตั้งไว้ (var(--ink))
+    // ถ้าตั้งตัวหนังสือสีขาว ปุ่มจะว่างเปล่า จึงต้องให้ตัวหนังสือในปุ่มตัดกับพื้นปุ่มเสมอ
+    rules.push(`.secondary-btn { color: ${readableTextOn(THEME_FALLBACKS.secondaryButtonColor)} !important; }`);
+  }
+  if (theme.borderColor) {
+    rules.push(`:root { --line-color: ${theme.borderColor}; }`);
+    rules.push(`.metric, .ui-toolbar, .table-wrap, .ui-card, .detail-card, .requests-split-detail, .secondary-btn, .daily-sheet-card { border-color: ${theme.borderColor} !important; }`);
+    rules.push(`.sheet-date, .sheet-label, .sheet-value, .sheet-number, .sheet-child, .sheet-child-value, .detail-status, .detail-section-title { border-color: ${theme.borderColor} !important; }`);
+  }
+  if (theme.fontScale && theme.fontScale !== 100) {
+    // ขนาดตัวหนังสือในเว็บกำหนดเป็น px ตายตัวหลายร้อยจุด จึงขยายทั้งส่วนเนื้อหาด้วย zoom แทน
+    // (ไม่รวมแถบเมนู แถบบน และหน้าต่าง popup ซึ่งอยู่นอกส่วนนี้)
+    rules.push(`.requests-split, .dashboard-page, .editor-shell { zoom: ${theme.fontScale / 100}; }`);
   }
   return rules.join('\n');
 };
