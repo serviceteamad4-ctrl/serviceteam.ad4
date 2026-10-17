@@ -92,21 +92,21 @@ export default function FilterPanel({ filters, setFilters, onClose, requests = [
       return (
         <div style={{ padding: '16px', display: 'grid', gap: '14px' }}>
           <label style={{ display: 'block' }}>
-            <span style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#666' }}>ตั้งแต่วันที่</span>
+            <span className="filter-sublabel" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#666' }}>ตั้งแต่วันที่</span>
             <input
               type="date"
               value={range.from || ''}
               onChange={(e) => handleDateRangeChange(activeField, 'from', e.target.value)}
-              style={dateInputStyle}
+              className="filter-input" style={dateInputStyle}
             />
           </label>
           <label style={{ display: 'block' }}>
-            <span style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#666' }}>ถึงวันที่</span>
+            <span className="filter-sublabel" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#666' }}>ถึงวันที่</span>
             <input
               type="date"
               value={range.to || ''}
               onChange={(e) => handleDateRangeChange(activeField, 'to', e.target.value)}
-              style={dateInputStyle}
+              className="filter-input" style={dateInputStyle}
             />
           </label>
         </div>
@@ -158,9 +158,10 @@ export default function FilterPanel({ filters, setFilters, onClose, requests = [
       <>
         <div style={{ padding: '16px 16px 8px' }}>
           <label style={{ display: 'block' }}>
-            <span style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#666' }}>พิมพ์ค้นหา</span>
+            <span className="filter-sublabel" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#666' }}>พิมพ์ค้นหา</span>
             <input
               type="text"
+              className="filter-input"
               placeholder="ค้นหา..."
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}

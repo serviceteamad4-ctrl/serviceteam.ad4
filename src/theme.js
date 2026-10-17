@@ -183,6 +183,26 @@ export const buildThemeCss = (theme) => {
     rules.push(`.metric, .ui-toolbar, .table-wrap, .ui-card, .detail-card, .requests-split-detail, .secondary-btn, .daily-sheet-card { border-color: ${line} !important; }`);
     rules.push(`.sheet-date, .sheet-label, .sheet-value, .sheet-number, .sheet-child, .sheet-child-value, .detail-status, .detail-section-title { border-color: ${line} !important; }`);
   }
+  // แผงตัวกรองด้านขวา: ถ้าตั้งสีกล่องเนื้อหาไว้ ให้แผงใช้สีเดียวกัน (ทึบเสมอ เพราะวางทับรายการงาน)
+  // ถ้าไม่ได้ตั้ง แผงยังเป็นสีขาวเดิม + ตัวหนังสือเข้ม (กำหนดไว้ใน modern-ui.css)
+  if (theme.panelColor) {
+    const panelText = theme.textColor || readableTextOn(theme.panelColor);
+    rules.push(`body .filter-panel { background: ${toCssFill(theme.panelColor)}; --ink: ${panelText}; color: ${panelText}; }`);
+    rules.push('body .filter-actions { background: transparent; }');
+    rules.push(`body .filter-sublabel, body .filter-field b, body .no-options { color: ${panelText} !important; opacity: 0.7; }`);
+    rules.push(`body .filter-field:hover, body .check-option:hover { background: ${hexToRgba(theme.accentColor || THEME_FALLBACKS.accentColor, 0.15)}; }`);
+  }
+  if (line) {
+    rules.push(`body .filter-header, body .filter-field, body .filter-actions { border-color: ${line} !important; }`);
+  }
+  if (theme.inputColor) {
+    rules.push(`body .filter-input { background: ${toCssFill(theme.inputColor)} !important; color: ${readableTextOn(theme.inputColor)} !important; border-color: ${line || '#ddd'} !important; }`);
+    if (readableTextOn(theme.inputColor) === '#ffffff') rules.push('body .filter-input { color-scheme: dark; }');
+  }
+  if (theme.accentColor) {
+    rules.push(`body .done-filter { color: ${theme.accentColor}; } body .check-option input { accent-color: ${theme.accentColor}; }`);
+  }
+
   if (theme.fontScale && theme.fontScale !== 100) {
     // ขนาดตัวหนังสือในเว็บกำหนดเป็น px ตายตัวหลายร้อยจุด จึงขยายทั้งส่วนเนื้อหาด้วย zoom แทน
     // (ไม่รวมแถบเมนู แถบบน และหน้าต่าง popup ซึ่งอยู่นอกส่วนนี้)
