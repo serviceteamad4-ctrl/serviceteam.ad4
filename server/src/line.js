@@ -60,6 +60,44 @@ const LABEL_TO_FIELD = {
   'ชื่องาน': 'jobName',
   'ชื่อร้าน': 'jobName',
   'รายละเอียดงาน': 'detail',
+  // เวลาจริงที่เปิด/ปิดงาน เผื่อส่งข้อความทีหลัง เช่น "เวลา: 16.22"
+  'เวลา': 'time',
+  'เวลาแจ้ง': 'time',
+  'เวลาเปิดงาน': 'time',
+  'เวลาปิดงาน': 'time',
+  'เวลาเสร็จ': 'time',
+};
+
+// "16.22" / "16:22" / "16.22 น." / "17/10/2569 16.22" -> ISO string (เวลาไทย UTC+7) หรือ null ถ้าอ่านไม่ออก
+// ไม่ระบุวันที่ = วันนี้ แต่ถ้าเวลานั้นยังมาไม่ถึง (เช่นส่ง "23.50" หลังเที่ยงคืน) ถือว่าเป็นของเมื่อวาน
+const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
+export const parseThaiTime = (text, now = new Date()) => {
+  const value = String(text || '').trim();
+  const timeMatch = value.match(/(\d{1,2})\s*[.:：]\s*(\d{2})(?!\d)/);
+  if (!timeMatch) return null;
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2]);
+  if (hour > 23 || minute > 59) return null;
+
+  const dateMatch = value.match(/(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*(\d{2,4}))?/);
+  const bangkokNow = new Date(now.getTime() + BANGKOK_OFFSET_MS);
+  let year = bangkokNow.getUTCFullYear();
+  let month = bangkokNow.getUTCMonth();
+  let day = bangkokNow.getUTCDate();
+  if (dateMatch) {
+    day = Number(dateMatch[1]);
+    month = Number(dateMatch[2]) - 1;
+    if (dateMatch[3]) {
+      year = Number(dateMatch[3]);
+      if (year < 100) year += year > 50 ? 2500 : 2000;
+      if (year > 2400) year -= 543; // ปี พ.ศ.
+    }
+    if (day < 1 || day > 31 || month < 0 || month > 11) return null;
+  }
+
+  let result = Date.UTC(year, month, day, hour, minute) - BANGKOK_OFFSET_MS;
+  if (!dateMatch && result > now.getTime() + 5 * 60 * 1000) result -= 24 * 60 * 60 * 1000;
+  return new Date(result).toISOString();
 };
 
 const DONE_STATUSES = ['เรียบร้อยปกติ', 'ยกเลิก'];
@@ -106,6 +144,12 @@ export const parseLineMessage = (text) => {
     const ticketMatch = line.match(/^(?:เลขที่งาน|เลขงาน|เลขที่|เลข)\s*[:：]?\s*([A-Za-z]*\d+)$/);
     if (ticketMatch) {
       fields.ticket = ticketMatch[1];
+      continue;
+    }
+    // "เวลา 16.22" (ไม่มี :) ก็รับ
+    const timeMatch = line.match(/^(?:เวลา(?:แจ้ง|เปิดงาน|ปิดงาน|เสร็จ)?)\s+(\d.*)$/);
+    if (timeMatch) {
+      fields.time = timeMatch[1].trim();
       continue;
     }
     const match = line.match(/^([^:：]+)[:：]\s*(.*)$/);
@@ -184,7 +228,7 @@ const createRequestFromFields = async (fields) => {
       action: fields.action || null,
       status: 'รับเรื่อง',
       ma: 'N',
-      receivedAt: new Date().toISOString(),
+      receivedAt: parseThaiTime(fields.time) || new Date().toISOString(),
     })
     .select()
     .single();
@@ -271,7 +315,7 @@ const queuePendingClose = async (candidates, fields, completedAt, groupKey, extr
 };
 
 const closeRequestFromFields = async (fields, groupKey, rawText) => {
-  const completedAt = new Date().toISOString();
+  const completedAt = parseThaiTime(fields.time) || new Date().toISOString();
   // ไม่มีหัวข้อ "การดำเนินการ" ก็ใช้รายละเอียดงาน + บรรทัดอิสระที่เหลือ (สิ่งที่ทำ/อาการ) แทน
   if (!fields.action) {
     const combined = [fields.detail, ...(fields.extra || [])].filter(Boolean).join('\n');
