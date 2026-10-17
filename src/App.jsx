@@ -354,6 +354,9 @@ function App() {
   // งานที่แจ้งเข้ามาผ่านกลุ่ม LINE แล้วแนบรูปมาหลายรูป รอให้เลือกว่าจะใช้รูปไหน
   const [linePending, setLinePending] = useState([]);
   const [linePendingOpen, setLinePendingOpen] = useState(false);
+  // เปิดจากสัญลักษณ์ที่แถวของงาน = โชว์เฉพาะงานนั้น, เปิดจากปุ่มด้านบน (null) = โชว์ทุกงาน
+  const [linePendingRequestId, setLinePendingRequestId] = useState(null);
+  const pendingImageIds = useMemo(() => new Set(linePending.map((item) => item.request_id)), [linePending]);
 
   useEffect(() => {
     if (!API_BASE_URL) return undefined;
@@ -383,12 +386,14 @@ function App() {
       body: JSON.stringify({ url }),
     });
     setLinePending((prev) => prev.filter((item) => item.id !== pendingId));
+    if (linePendingRequestId) setLinePendingOpen(false);
     setRequests(await readRequests());
   };
 
   const handleSkipLineImage = async (pendingId) => {
     await fetch(`${API_BASE_URL}/api/line/pending-images/${pendingId}`, { method: 'DELETE' });
     setLinePending((prev) => prev.filter((item) => item.id !== pendingId));
+    if (linePendingRequestId) setLinePendingOpen(false);
   };
 
   useEffect(() => {
@@ -618,7 +623,7 @@ function App() {
         <header className="topbar">
           <div className="top-actions">
             {linePending.length > 0 && (
-              <button type="button" className="secondary-btn" onClick={() => setLinePendingOpen(true)}>
+              <button type="button" className="secondary-btn" onClick={() => { setLinePendingRequestId(null); setLinePendingOpen(true); }}>
                 🔔 เลือกรูปจาก LINE ({linePending.length})
               </button>
             )}
@@ -629,7 +634,7 @@ function App() {
 
         {linePendingOpen && (
           <LinePendingImages
-            items={linePending}
+            items={linePendingRequestId ? linePending.filter((item) => item.request_id === linePendingRequestId) : linePending}
             onChoose={handleChooseLineImage}
             onSkip={handleSkipLineImage}
             onClose={() => setLinePendingOpen(false)}
@@ -652,6 +657,8 @@ function App() {
             <div className={`requests-split${selectedRequest ? ' has-detail' : ''}`}>
               <div className="requests-split-list">
                 <RequestsView
+                  pendingImageIds={pendingImageIds}
+                  onOpenPendingImages={(requestId) => { setLinePendingRequestId(requestId); setLinePendingOpen(true); }}
                   compact={Boolean(selectedRequest)}
                   selectedId={selectedRequest?.id}
                   onView={(request) => setSelectedRequest(request)}
@@ -722,7 +729,7 @@ const formatChipDate = (value) => {
   return d && m && y ? `${d}/${m}/${y}` : value;
 };
 
-function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, advancedFilters, setAdvancedFilters, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error, scrollRestoreRef, highlightId, onHighlightExpire, compact = false, selectedId = null }) {
+function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus, selectedMonth, setSelectedMonth, page, setPage, totalPages, pageSize, setPageSize, setFilterOpen, advancedFilters, setAdvancedFilters, onAdd, onView, onEdit, onExport, onExportPdf, isLoading, error, scrollRestoreRef, highlightId, onHighlightExpire, compact = false, selectedId = null, pendingImageIds = null, onOpenPendingImages = () => {} }) {
   const monthInputRef = useRef(null);
 
   // กลับมาหน้ารายการแล้วเลื่อนไปตำแหน่งเดิมที่เคยอยู่ก่อนกดดู/แก้ไขงาน แทนที่จะเริ่มจากบนสุดใหม่
@@ -853,18 +860,34 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
                       transition: 'background-color 1.2s ease',
                     };
                     const cellStyle = { padding: '10px 10px', borderBottom: '1px solid #eef1ef', borderRight: '1px solid #eef1ef', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight };
+                    // งานที่แจ้งผ่าน LINE แล้วมีรูปหลายรูปรอเลือก: มีสัญลักษณ์ที่ช่องเลขที่งาน กดแล้วเปิดหน้าเลือกรูปของงานนี้
+                    const ticketCell = (
+                      <div style={cellStyle} onClick={() => onView(request)}>
+                        {pendingImageIds?.has(request.id) && (
+                          <button
+                            type="button"
+                            title="มีรูปจาก LINE หลายรูป รอเลือกว่าจะใช้รูปไหน"
+                            onClick={(event) => { event.stopPropagation(); onOpenPendingImages(request.id); }}
+                            style={{ marginRight: '6px', padding: '1px 6px', border: '1px solid #f1c75b', borderRadius: '999px', background: '#fff6dc', color: '#8a6a12', fontSize: '11px', cursor: 'pointer', verticalAlign: 'middle' }}
+                          >
+                            🖼️ เลือกรูป
+                          </button>
+                        )}
+                        {request.ticket || '-'}
+                      </div>
+                    );
                     return (
                     <React.Fragment key={request.id}>
                       <div style={cellStyle} onClick={() => onView(request)}>{request.customer || '—'}</div>
                       {compact ? (
                         <>
-                          <div style={cellStyle} onClick={() => onView(request)}>{request.ticket || '-'}</div>
+                          {ticketCell}
                           <div style={cellStyle} onClick={() => onView(request)}>{request.location || '—'}</div>
                         </>
                       ) : (
                         <>
                           <div style={cellStyle} onClick={() => onView(request)}>{request.ref || '-'}</div>
-                          <div style={cellStyle} onClick={() => onView(request)}>{request.ticket || '-'}</div>
+                          {ticketCell}
                           <div style={cellStyle} onClick={() => onView(request)}>{request.location || '—'}</div>
                           <div style={cellStyle} onClick={() => onView(request)}>{request.assignee || '—'}</div>
                           <div style={{ padding: '8px 8px', borderBottom: '1px solid #eef1ef', display: 'flex', alignItems: 'center', justifyContent: 'center', ...rowHighlight }}>
