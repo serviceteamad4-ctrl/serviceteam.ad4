@@ -56,6 +56,10 @@ const LABEL_TO_FIELD = {
   'ผู้ดำเนินการ': 'assignee',
   'การดำเนินการ': 'action',
   'รายละเอียดการดำเนินการ': 'action',
+  // ข้อความแจ้งปิดงานที่ทีมเขียนจริง ใช้ "ชื่องาน" (มักรวมชื่อร้าน+สาขา) และ "รายละเอียดงาน"
+  'ชื่องาน': 'jobName',
+  'ชื่อร้าน': 'jobName',
+  'รายละเอียดงาน': 'detail',
 };
 
 const DONE_STATUSES = ['เรียบร้อยปกติ', 'ยกเลิก'];
@@ -105,13 +109,13 @@ export const parseLineMessage = (text) => {
       continue;
     }
     const match = line.match(/^([^:：]+)[:：]\s*(.*)$/);
-    if (!match) continue;
-    const label = match[1].trim();
-    const value = match[2].trim();
-    const field = LABEL_TO_FIELD[label];
-    if (field && value) {
-      fields[field] = value;
+    const field = match ? LABEL_TO_FIELD[match[1].trim()] : null;
+    if (field) {
+      if (match[2].trim()) fields[field] = match[2].trim();
+      continue;
     }
+    // บรรทัดที่ไม่มีหัวข้อที่รู้จัก (เช่น "สถานะจอ Offline", "ลง Autorun ทั้ง 5 จอ") เก็บไว้รวมเป็นรายละเอียดงาน
+    fields.extra = [...(fields.extra || []), line];
   }
   return { kind, fields };
 };
@@ -212,8 +216,67 @@ export const applyClose = async (requestId, fields, completedAt) => {
 };
 
 // คืนค่า { request } = ปิดแล้ว, { pendingCloseId } = เจอหลายงาน พักให้เลือกในเว็บ, null = ปิดไม่ได้
-const closeRequestFromFields = async (fields, groupKey) => {
+// แยกคำสำหรับเทียบความใกล้เคียง: ตัวพิมพ์เล็ก ตัดเครื่องหมาย ตัดคำทั่วไปที่ไม่ช่วยแยกงาน
+const STOP_WORDS = new Set(['the', 'and', 'of', 'at', 'in', 'shop', 'fl', 'floor', 'ชั้น', 'สาขา', 'ร้าน']);
+const tokensOf = (text) => normalizeText(text)
+  .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+  .split(/\s+/)
+  .filter((token) => token.length >= 3 && !STOP_WORDS.has(token));
+
+// หางานค้างที่น่าจะตรงกับข้อความ (ชื่องาน/สถานที่/ลูกค้า) เรียงจากคะแนนมากไปน้อย
+// คะแนน = ความยาวรวมของคำที่เจอในงานนั้น (คำยาวอย่าง "ngamwongwan" มีน้ำหนักกว่าคำสั้น)
+const findSimilarOpenRequests = async (fields, limit = 5) => {
+  const queryTokens = [...new Set(tokensOf([fields.jobName, fields.location, fields.customer].filter(Boolean).join(' ')))];
+  if (queryTokens.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('requests')
+    .select('id, ticket, customer, location, site, description, receivedAt')
+    .not('status', 'in', `(${DONE_STATUSES.map((s) => `"${s}"`).join(',')})`);
+  if (error) throw error;
+
+  return data
+    .map((row) => {
+      const haystack = normalizeText([row.customer, row.location, row.site, row.description, row.ticket].join(' '));
+      const score = queryTokens.reduce((sum, token) => (haystack.includes(token) ? sum + token.length : sum), 0);
+      return { row, score };
+    })
+    .filter(({ score }) => score >= 4)
+    .sort((a, b) => b.score - a.score || String(b.row.receivedAt).localeCompare(String(a.row.receivedAt)))
+    .slice(0, limit)
+    .map(({ row }) => row);
+};
+
+const queuePendingClose = async (candidates, fields, completedAt, groupKey, extra) => {
+  const { data, error } = await supabase
+    .from('line_pending_closes')
+    .insert({
+      candidate_ids: candidates.map((m) => m.id),
+      fields: {
+        customer: fields.customer || null,
+        location: fields.location || null,
+        jobName: fields.jobName || null,
+        assignee: fields.assignee || null,
+        action: fields.action || null,
+        ...extra,
+      },
+      completed_at: completedAt,
+      source_group_id: groupKey,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  recordHit({ closePending: data.id, candidates: candidates.map((m) => m.ticket), fuzzy: Boolean(extra?.fuzzy) });
+  return { pendingCloseId: data.id };
+};
+
+const closeRequestFromFields = async (fields, groupKey, rawText) => {
   const completedAt = new Date().toISOString();
+  // ไม่มีหัวข้อ "การดำเนินการ" ก็ใช้รายละเอียดงาน + บรรทัดอิสระที่เหลือ (สิ่งที่ทำ/อาการ) แทน
+  if (!fields.action) {
+    const combined = [fields.detail, ...(fields.extra || [])].filter(Boolean).join('\n');
+    if (combined) fields.action = combined;
+  }
 
   // ระบุเลขงานมา = ปิดงานนั้นตรงๆ ไม่ต้องเทียบลูกค้า/สถานที่
   if (fields.ticket) {
@@ -226,34 +289,20 @@ const closeRequestFromFields = async (fields, groupKey) => {
     return { request };
   }
 
-  if (!fields.customer) {
-    recordHit({ closeSkipped: 'missing ลูกค้า and เลข' });
-    return null;
-  }
-  const matches = await findOpenRequests(fields);
-  if (matches.length === 0) {
-    recordHit({ closeSkipped: 'no open job found', customer: fields.customer, location: fields.location || null });
-    return null;
-  }
-  if (matches.length === 1) {
-    await applyClose(matches[0].id, fields, completedAt);
-    return { request: matches[0] };
+  // ลูกค้า (+สถานที่) ตรงกันเป๊ะ: งานเดียวปิดเลย หลายงานให้เลือกในเว็บ (เหมือนเดิม)
+  if (fields.customer) {
+    const matches = await findOpenRequests(fields);
+    if (matches.length === 1) {
+      await applyClose(matches[0].id, fields, completedAt);
+      return { request: matches[0] };
+    }
+    if (matches.length > 1) return queuePendingClose(matches, fields, completedAt, groupKey);
   }
 
-  // ลูกค้า+สถานที่ซ้ำกันหลายงาน ไม่เดาเอง
-  const { data, error } = await supabase
-    .from('line_pending_closes')
-    .insert({
-      candidate_ids: matches.map((m) => m.id),
-      fields: { customer: fields.customer, location: fields.location || null, assignee: fields.assignee || null, action: fields.action || null },
-      completed_at: completedAt,
-      source_group_id: groupKey,
-    })
-    .select('id')
-    .single();
-  if (error) throw error;
-  recordHit({ closePending: data.id, candidates: matches.map((m) => m.ticket) });
-  return { pendingCloseId: data.id };
+  // ไม่มีเลขงาน และชื่อไม่ตรงเป๊ะ (เช่นเขียนแบบอิสระ "ชื่องาน: True Shop The Mall Ngamwongwan 6FL.")
+  // ไม่ปิดเอง: หางานที่ใกล้เคียงที่สุดแล้วให้คนยืนยันในเว็บ แม้จะหาไม่เจอเลยก็แจ้งให้ใส่เลขงานเอง
+  const similar = await findSimilarOpenRequests(fields);
+  return queuePendingClose(similar, fields, completedAt, groupKey, { fuzzy: true, rawText: String(rawText || '').slice(0, 1500) });
 };
 
 // รูปที่พักไว้กับ "แจ้งปิดงาน" ที่รอเลือกงาน: เลือกงานแล้วค่อยใส่ (1 รูป = ใส่เลย, หลายรูป = ไปคิวเลือกรูป)
@@ -322,7 +371,7 @@ const handleTextMessage = async (groupKey, text) => {
   }
 
   if (parsed.kind === 'close') {
-    const result = await closeRequestFromFields(parsed.fields, groupKey);
+    const result = await closeRequestFromFields(parsed.fields, groupKey, text);
     if (!result) {
       activeByGroup.delete(groupKey); // ไม่ให้รูปที่ตามมาไปติดงานก่อนหน้าโดยไม่ตั้งใจ
       return;
@@ -572,12 +621,21 @@ lineRouter.post('/pending-closes/:id/choose', async (req, res) => {
     if (fetchError) throw fetchError;
     if (!pending) return res.status(404).json({ message: 'Pending close not found' });
 
-    const requestId = req.body?.requestId;
-    if (!pending.candidate_ids.includes(requestId)) {
-      return res.status(400).json({ message: 'requestId must be one of the candidates' });
+    let request;
+    if (req.body?.ticket) {
+      // ระบบเดางานผิด/หาไม่เจอ: คนพิมพ์เลขงานเองในเว็บ
+      const found = await findRequestByTicket(req.body.ticket);
+      if (!found.request) return res.status(404).json({ message: found.reason === 'ticket not found' ? 'ไม่พบเลขงานนี้' : `เลขงานไม่ชัดเจน (${found.reason})` });
+      request = found.request;
+    } else {
+      const requestId = req.body?.requestId;
+      if (!pending.candidate_ids.includes(requestId)) {
+        return res.status(400).json({ message: 'requestId must be one of the candidates' });
+      }
+      const { data, error: requestError } = await supabase.from('requests').select('id, ticket').eq('id', requestId).single();
+      if (requestError) throw requestError;
+      request = data;
     }
-    const { data: request, error: requestError } = await supabase.from('requests').select('id, ticket').eq('id', requestId).single();
-    if (requestError) throw requestError;
 
     await applyClose(request.id, pending.fields, pending.completed_at);
     await attachImagesToRequest(request, 'completedImage', pending.images, pending.source_group_id);

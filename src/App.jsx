@@ -384,6 +384,12 @@ function App() {
     [linePendingCloses],
   );
 
+  // ข้อความแจ้งปิดงานที่เขียนไม่ตรงแพทเทิร์น (ไม่มีเลขงาน/ลูกค้าไม่ตรง) แยกปุ่มแจ้งเตือนต่างหาก
+  const [linePendingClosesFuzzyOnly, setLinePendingClosesFuzzyOnly] = useState(false);
+  const fuzzyCloses = linePendingCloses.filter((item) => item.fields?.fuzzy);
+  const normalCloses = linePendingCloses.filter((item) => !item.fields?.fuzzy);
+  const seenFuzzyCloseIds = useRef(null);
+
   const refreshLineQueues = async () => {
     if (!API_BASE_URL) return;
     try {
@@ -392,7 +398,17 @@ function App() {
         fetch(`${API_BASE_URL}/api/line/pending-closes`),
       ]);
       if (imagesResponse.ok) setLinePending(await imagesResponse.json());
-      if (closesResponse.ok) setLinePendingCloses(await closesResponse.json());
+      if (closesResponse.ok) {
+        const closes = await closesResponse.json();
+        const fuzzyIds = closes.filter((item) => item.fields?.fuzzy).map((item) => item.id);
+        // เด้งแจ้งเตือนเฉพาะรายการใหม่ที่เพิ่งเข้ามา (ตอนเปิดหน้าครั้งแรกไม่ต้องเด้ง ปุ่มด้านบนบอกอยู่แล้ว)
+        if (seenFuzzyCloseIds.current && fuzzyIds.some((id) => !seenFuzzyCloseIds.current.has(id))) {
+          setToast('⚠️ มีคนแจ้งปิดงานมาใน LINE แต่ไม่ตรงแพทเทิร์น กดปุ่มสีส้มด้านบนเพื่อตรวจสอบ');
+          setTimeout(() => setToast(''), 8000);
+        }
+        seenFuzzyCloseIds.current = new Set(fuzzyIds);
+        setLinePendingCloses(closes);
+      }
     } catch {
       // เงียบไว้ ไม่ต้องรบกวนผู้ใช้ด้วย error ของการโพลระยะสั้นแบบนี้ รอบถัดไปค่อยลองใหม่
     }
@@ -415,6 +431,24 @@ function App() {
     // เลือกปิดแล้วถ้ามีรูปหลายรูป จะกลายเป็นรายการรอเลือกรูป ต้องดึงใหม่
     await refreshLineQueues();
     setRequests(await readRequests());
+  };
+
+  // ระบบเดางานผิด/หาไม่เจอ: พิมพ์เลขงานเอง คืนข้อความ error ถ้าปิดไม่สำเร็จ (ให้หน้าต่างแสดง)
+  const handleChooseLineCloseByTicket = async (pendingId, ticket) => {
+    const response = await fetch(`${API_BASE_URL}/api/line/pending-closes/${pendingId}/choose`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticket }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      return body.message || 'ปิดงานไม่สำเร็จ';
+    }
+    setLinePendingCloses((prev) => prev.filter((item) => item.id !== pendingId));
+    if (linePendingCloseRequestId) setLinePendingClosesOpen(false);
+    await refreshLineQueues();
+    setRequests(await readRequests());
+    return null;
   };
 
   const handleDismissLineClose = async (pendingId) => {
@@ -671,9 +705,19 @@ function App() {
                 🔔 เลือกรูปจาก LINE ({linePending.length})
               </button>
             )}
-            {linePendingCloses.length > 0 && (
-              <button type="button" className="secondary-btn" onClick={() => { setLinePendingCloseRequestId(null); setLinePendingClosesOpen(true); }}>
-                🔔 เลือกงานที่จะปิดจาก LINE ({linePendingCloses.length})
+            {fuzzyCloses.length > 0 && (
+              <button
+                type="button"
+                className="secondary-btn"
+                style={{ background: '#fff4e5', borderColor: '#f0a43a', color: '#9a5a00' }}
+                onClick={() => { setLinePendingCloseRequestId(null); setLinePendingClosesFuzzyOnly(true); setLinePendingClosesOpen(true); }}
+              >
+                ⚠️ แจ้งปิดงานไม่ตรงแพทเทิร์น ({fuzzyCloses.length})
+              </button>
+            )}
+            {normalCloses.length > 0 && (
+              <button type="button" className="secondary-btn" onClick={() => { setLinePendingCloseRequestId(null); setLinePendingClosesFuzzyOnly(false); setLinePendingClosesOpen(true); }}>
+                🔔 เลือกงานที่จะปิดจาก LINE ({normalCloses.length})
               </button>
             )}
             <span>{requests.length} รายการ</span>
@@ -701,8 +745,9 @@ function App() {
           <LinePendingCloses
             items={linePendingCloseRequestId
               ? linePendingCloses.filter((item) => item.candidates.some((job) => job.id === linePendingCloseRequestId))
-              : linePendingCloses}
+              : (linePendingClosesFuzzyOnly ? fuzzyCloses : normalCloses)}
             onChoose={handleChooseLineClose}
+            onChooseTicket={handleChooseLineCloseByTicket}
             onDismiss={handleDismissLineClose}
             onClose={() => setLinePendingClosesOpen(false)}
           />
