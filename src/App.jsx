@@ -677,12 +677,14 @@ function App() {
               </button>
             )}
             <span>{requests.length} รายการ</span>
-            <button type="button" className="secondary-btn" onClick={() => setSettingsOpen(true)}>⚙ ตั้งค่า</button>
+            {view !== 'reports' && (
+              <button type="button" className="secondary-btn" onClick={() => setSettingsOpen(true)}>⚙ ตั้งค่า</button>
+            )}
           </div>
         </header>
 
         <style>{buildThemeCss(theme)}</style>
-        {settingsOpen && (
+        {settingsOpen && view !== 'reports' && (
           <SettingsPanel theme={theme} onChange={updateTheme} onClose={() => setSettingsOpen(false)} />
         )}
 

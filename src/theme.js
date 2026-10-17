@@ -26,11 +26,32 @@ export const THEME_FALLBACKS = {
   secondaryButtonColor: '#ffffff',
 };
 
-// สีตัวหนังสือบนปุ่ม: ขาวบนสีเข้ม ดำบนสีอ่อน ผู้ใช้ไม่ต้องตั้งเอง และอ่านออกเสมอ
-const readableTextOn = (hex) => {
-  const value = hex.replace('#', '');
+// ช่องที่เป็น "พื้น" เลือกได้ทั้งสีเดียว ("#rrggbb") หรือไล่สี ({ from, to, angle })
+// ส่วนสีตัวหนังสือเป็นสีเดียวเสมอ
+export const FILL_FIELDS = ['sidebarColor', 'topbarColor', 'pageColor', 'panelColor', 'primaryButtonColor', 'secondaryButtonColor'];
+
+export const GRADIENT_DIRECTIONS = [
+  { angle: 90, label: 'ซ้าย → ขวา' },
+  { angle: 180, label: 'บน → ล่าง' },
+  { angle: 135, label: 'เฉียง ↘' },
+  { angle: 45, label: 'เฉียง ↗' },
+];
+
+export const isGradient = (value) => Boolean(value && typeof value === 'object');
+
+export const toCssFill = (value) => (isGradient(value)
+  ? `linear-gradient(${value.angle}deg, ${value.from}, ${value.to})`
+  : value);
+
+export const luminanceOf = (hex) => {
+  const value = String(hex).replace('#', '');
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(value.slice(i, i + 2), 16));
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+};
+
+// สีตัวหนังสือบนปุ่ม: ขาวบนสีเข้ม ดำบนสีอ่อน (ไล่สีใช้ค่าเฉลี่ยของ 2 สี) ผู้ใช้ไม่ต้องตั้งเอง และอ่านออกเสมอ
+const readableTextOn = (fill) => {
+  const luminance = isGradient(fill) ? (luminanceOf(fill.from) + luminanceOf(fill.to)) / 2 : luminanceOf(fill);
   return luminance > 0.6 ? '#18242b' : '#ffffff';
 };
 
@@ -60,32 +81,33 @@ export const buildThemeCss = (theme) => {
     rules.push(`body, .main-content, .page-heading h1, .metric strong { color: ${theme.textColor}; }`);
   }
   if (theme.sidebarColor) {
-    rules.push(`.sidebar { background: ${theme.sidebarColor} !important; }`);
+    rules.push(`.sidebar { background: ${toCssFill(theme.sidebarColor)} !important; }`);
   }
   if (theme.sidebarTextColor) {
     rules.push(`.sidebar, .sidebar .nav-item, .sidebar .nav-item span, .sidebar .brand-text strong { color: ${theme.sidebarTextColor} !important; }`);
   }
   if (theme.pageColor || theme.backgroundImage) {
-    const color = theme.pageColor || THEME_FALLBACKS.pageColor;
-    const image = theme.backgroundImage ? `url("${theme.backgroundImage}") center / cover no-repeat fixed, ` : '';
-    rules.push(`body { background: ${image}${color} !important; }`);
+    const fill = toCssFill(theme.pageColor || THEME_FALLBACKS.pageColor);
+    const image = theme.backgroundImage ? `url("${theme.backgroundImage}") center / cover no-repeat, ` : '';
+    // fixed: ไล่สีกับรูปยึดตามหน้าจอ ไม่ยืดตามความยาวทั้งหน้า (ตารางยาวมาก ไล่สีจะจางจนแทบไม่เห็น)
+    rules.push(`body { background: ${image}${fill} !important; background-attachment: fixed !important; }`);
   }
   // แถบด้านบนกับกล่องตัวกรองเดิมเป็นสีขาวโปร่งแสง วางบนพื้นหลังสีเข้มแล้วกลายเป็นสีเทา
   // ตั้งสีแล้วให้เป็นสีทึบตามที่เลือก
   if (theme.topbarColor) {
-    rules.push(`.topbar { background: ${theme.topbarColor} !important; backdrop-filter: none !important; }`);
+    rules.push(`.topbar { background: ${toCssFill(theme.topbarColor)} !important; backdrop-filter: none !important; }`);
   }
   if (theme.panelColor) {
-    rules.push(`.ui-toolbar, .metric, .table-wrap, .detail-card, .requests-split-detail { background: ${theme.panelColor} !important; backdrop-filter: none !important; }`);
+    rules.push(`.ui-toolbar, .metric, .table-wrap, .detail-card, .requests-split-detail { background: ${toCssFill(theme.panelColor)} !important; backdrop-filter: none !important; }`);
     // แถบหัวกลุ่มสถานะ/หัวคอลัมน์ในตาราง: ใช้สีเทาโปร่งทับสีกล่อง ให้ต่างจากแถวข้อมูลนิดหน่อย
     // ไม่งั้นแถบยังเป็นสีอ่อนเดิม แล้วตัวหนังสือสีอ่อนที่ตั้งไว้จะมองไม่เห็น
     rules.push(':root { --table-group-bg: rgba(128, 128, 128, 0.18); --table-head-bg: rgba(128, 128, 128, 0.1); --table-head-text: inherit; }');
   }
   if (theme.primaryButtonColor) {
-    rules.push(`.primary-btn { background: ${theme.primaryButtonColor} !important; color: ${readableTextOn(theme.primaryButtonColor)} !important; box-shadow: none !important; }`);
+    rules.push(`.primary-btn { background: ${toCssFill(theme.primaryButtonColor)} !important; color: ${readableTextOn(theme.primaryButtonColor)} !important; box-shadow: none !important; }`);
   }
   if (theme.secondaryButtonColor) {
-    rules.push(`.secondary-btn { background: ${theme.secondaryButtonColor} !important; color: ${readableTextOn(theme.secondaryButtonColor)} !important; }`);
+    rules.push(`.secondary-btn { background: ${toCssFill(theme.secondaryButtonColor)} !important; color: ${readableTextOn(theme.secondaryButtonColor)} !important; }`);
   }
   return rules.join('\n');
 };

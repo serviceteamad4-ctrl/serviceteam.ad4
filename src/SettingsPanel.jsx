@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { DEFAULT_THEME, THEME_FALLBACKS, resizeImageToDataUrl } from './theme.js';
+import {
+  DEFAULT_THEME, THEME_FALLBACKS, GRADIENT_DIRECTIONS, isGradient, toCssFill, luminanceOf, resizeImageToDataUrl,
+} from './theme.js';
 
 const rowStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '14px 0', borderBottom: '1px solid #eef1ef' };
 const labelStyle = { fontSize: '14px', color: '#18242b' };
@@ -17,6 +19,55 @@ function ColorRow({ label, field, theme, onChange }) {
           onChange={(event) => onChange({ [field]: event.target.value })}
           style={{ width: '48px', height: '36px', padding: '2px', border: '1px solid #dfe6e4', borderRadius: '8px', cursor: 'pointer', background: '#fff' }}
         />
+      </div>
+    </div>
+  );
+}
+
+const colorInputStyle = { width: '40px', height: '32px', padding: '2px', border: '1px solid #dfe6e4', borderRadius: '8px', cursor: 'pointer', background: '#fff' };
+const modeButtonStyle = (active) => ({
+  padding: '4px 10px', fontSize: '12px', cursor: 'pointer', border: '1px solid #dfe6e4',
+  background: active ? '#18242b' : '#fff', color: active ? '#fff' : '#18242b',
+});
+
+// ช่องพื้น: เลือกได้ "สีเดียว" หรือ "ไล่สี" (2 สี + ทิศทาง) พร้อมตัวอย่าง
+function FillRow({ label, field, theme, onChange }) {
+  const value = theme[field];
+  const gradient = isGradient(value);
+  const solid = gradient ? value.from : (value || THEME_FALLBACKS[field]);
+
+  const toGradient = () => onChange({
+    // สีที่ 2 เริ่มต้น: ตัดกับสีแรก จะได้เห็นการไล่สีชัดตั้งแต่กดครั้งแรก
+    [field]: { from: solid, to: luminanceOf(solid) > 0.5 ? '#3a3f9e' : '#9fd3ff', angle: 135 },
+  });
+  const toSolid = () => onChange({ [field]: gradient ? value.from : solid });
+  const setPart = (part, partValue) => onChange({ [field]: { ...value, [part]: partValue } });
+
+  return (
+    <div style={{ ...rowStyle, flexWrap: 'wrap' }}>
+      <span style={labelStyle}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {value && <button type="button" style={resetStyle} onClick={() => onChange({ [field]: null })}>ค่าเริ่มต้น</button>}
+        <div style={{ display: 'inline-flex', borderRadius: '8px', overflow: 'hidden' }}>
+          <button type="button" style={{ ...modeButtonStyle(!gradient), borderRadius: '8px 0 0 8px' }} onClick={toSolid}>สีเดียว</button>
+          <button type="button" style={{ ...modeButtonStyle(gradient), borderRadius: '0 8px 8px 0', borderLeft: 'none' }} onClick={toGradient}>ไล่สี</button>
+        </div>
+        {gradient ? (
+          <>
+            <input type="color" title="สีเริ่ม" value={value.from} onChange={(event) => setPart('from', event.target.value)} style={colorInputStyle} />
+            <input type="color" title="สีปลาย" value={value.to} onChange={(event) => setPart('to', event.target.value)} style={colorInputStyle} />
+            <select
+              value={value.angle}
+              onChange={(event) => setPart('angle', Number(event.target.value))}
+              style={{ height: '32px', borderRadius: '8px', border: '1px solid #dfe6e4', padding: '0 6px', color: '#18242b', background: '#fff', fontSize: '12px' }}
+            >
+              {GRADIENT_DIRECTIONS.map((direction) => <option key={direction.angle} value={direction.angle}>{direction.label}</option>)}
+            </select>
+            <span title="ตัวอย่าง" style={{ width: '40px', height: '32px', borderRadius: '8px', border: '1px solid #dfe6e4', background: toCssFill(value) }} />
+          </>
+        ) : (
+          <input type="color" value={solid} onChange={(event) => onChange({ [field]: event.target.value })} style={colorInputStyle} />
+        )}
       </div>
     </div>
   );
@@ -50,15 +101,15 @@ export default function SettingsPanel({ theme, onChange, onClose }) {
         </div>
 
         <h3 style={{ margin: '4px 0 0', fontSize: '13px', color: '#087f75' }}>แถบเมนูซ้าย</h3>
-        <ColorRow label="สีแถบเมนูซ้าย" field="sidebarColor" theme={theme} onChange={onChange} />
+        <FillRow label="สีแถบเมนูซ้าย" field="sidebarColor" theme={theme} onChange={onChange} />
         <ColorRow label="สีตัวหนังสือแถบเมนูซ้าย" field="sidebarTextColor" theme={theme} onChange={onChange} />
 
         <h3 style={{ margin: '18px 0 0', fontSize: '13px', color: '#087f75' }}>แถบด้านบน</h3>
-        <ColorRow label="สีแถบด้านบน" field="topbarColor" theme={theme} onChange={onChange} />
+        <FillRow label="สีแถบด้านบน" field="topbarColor" theme={theme} onChange={onChange} />
 
         <h3 style={{ margin: '18px 0 0', fontSize: '13px', color: '#087f75' }}>หน้าใช้งาน</h3>
-        <ColorRow label="สีพื้นหลัง" field="pageColor" theme={theme} onChange={onChange} />
-        <ColorRow label="สีกล่องเนื้อหา (ตัวกรอง การ์ด ตาราง)" field="panelColor" theme={theme} onChange={onChange} />
+        <FillRow label="สีพื้นหลัง" field="pageColor" theme={theme} onChange={onChange} />
+        <FillRow label="สีกล่องเนื้อหา (ตัวกรอง การ์ด ตาราง)" field="panelColor" theme={theme} onChange={onChange} />
         <div style={rowStyle}>
           <span style={labelStyle}>รูปพื้นหลัง</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -78,8 +129,8 @@ export default function SettingsPanel({ theme, onChange, onClose }) {
         <ColorRow label="สีตัวหนังสือ" field="textColor" theme={theme} onChange={onChange} />
 
         <h3 style={{ margin: '18px 0 0', fontSize: '13px', color: '#087f75' }}>ปุ่มกด</h3>
-        <ColorRow label="สีปุ่มหลัก (เพิ่มงานใหม่ บันทึก)" field="primaryButtonColor" theme={theme} onChange={onChange} />
-        <ColorRow label="สีปุ่มรอง (ตัวกรอง แก้ไข ดาวน์โหลด)" field="secondaryButtonColor" theme={theme} onChange={onChange} />
+        <FillRow label="สีปุ่มหลัก (เพิ่มงานใหม่ บันทึก)" field="primaryButtonColor" theme={theme} onChange={onChange} />
+        <FillRow label="สีปุ่มรอง (ตัวกรอง แก้ไข ดาวน์โหลด)" field="secondaryButtonColor" theme={theme} onChange={onChange} />
 
         <div className="modal-actions" style={{ justifyContent: 'space-between' }}>
           <button type="button" className="secondary-btn" onClick={() => onChange({ ...DEFAULT_THEME })}>คืนค่าเริ่มต้นทั้งหมด</button>
