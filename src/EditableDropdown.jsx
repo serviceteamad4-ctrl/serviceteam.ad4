@@ -3,6 +3,8 @@ import { useState } from 'react';
 export default function EditableDropdown({ name, label, value, options = [], onChange, onAddOption, onRemoveOption, required = false, multiple = false }) {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
+  // เปิดมาแล้วยังไม่ได้พิมพ์แก้ = ต้องเห็นตัวเลือกครบ ไม่ใช่กรองด้วยค่าเดิมที่เติมไว้ให้แก้/ก๊อปปี้
+  const [hasTyped, setHasTyped] = useState(false);
   const [showDeleteMode, setShowDeleteMode] = useState(false);
 
   // ตัดช่องว่างซ้ำ/ช่องว่างแบบพิเศษ (เช่น non-breaking space จากไฟล์ Excel) ออกก่อนเทียบ
@@ -23,7 +25,10 @@ export default function EditableDropdown({ name, label, value, options = [], onC
   // ไม่งั้นพอคลิกช่องที่มีค่าอยู่แล้ว ค่าจะถูกแทนที่ด้วยค่าว่างทันที (inputValue เริ่มที่ '' เสมอ)
   // ทำให้แก้ไข/ก๊อปปี้ข้อความเดิมไม่ได้ ต้องพิมพ์ใหม่หมดทุกครั้ง
   const openDropdown = () => {
+    // เปิดอยู่แล้ว (เช่นคลิกในช่องเพื่อย้ายเคอร์เซอร์ระหว่างแก้) ห้ามรีเซ็ตข้อความที่กำลังพิมพ์
+    if (isOpen) return;
     setIsOpen(true);
+    setHasTyped(false);
     if (!multiple) {
       setInputValue(value || '');
     }
@@ -76,7 +81,9 @@ export default function EditableDropdown({ name, label, value, options = [], onC
   };
 
   const normalizedInput = normalize(inputValue);
-  const filteredOptions = options.filter((opt) => normalize(opt).includes(normalizedInput));
+  const filteredOptions = hasTyped
+    ? options.filter((opt) => normalize(opt).includes(normalizedInput))
+    : options;
 
   return (
     <label className="editor-field">
@@ -89,6 +96,7 @@ export default function EditableDropdown({ name, label, value, options = [], onC
             onChange={(e) => {
               if (isOpen) {
                 setInputValue(e.target.value);
+                setHasTyped(true);
               }
             }}
             onClick={openDropdown}
