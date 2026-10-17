@@ -7,6 +7,39 @@ import { storeImage, removeImage } from './storage.js';
 // (กันไม่ให้ข้อความคุยเล่นทั่วไปในกลุ่มถูกตีความเป็นงานโดยไม่ตั้งใจ)
 const TRIGGER_WORD = 'แจ้งเปิดงาน';
 const CLOSE_TRIGGER_WORD = 'แจ้งปิดงาน';
+const MOVE_TRIGGER_WORD = 'แจ้งย้ายงาน';
+
+// สถานะที่ย้ายไปได้ (ตรงกับ STATUS_ORDER ใน App.jsx) + ชื่อเรียกสั้นๆ ที่คนพิมพ์กันจริง
+const MOVE_STATUSES = ['รับเรื่อง', 'รอดำเนินการ', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด', 'รออะไหล่', 'รอเสนอราคา', 'รอจัดคิวช่าง', 'เรียบร้อยปกติ', 'ยกเลิก'];
+const STATUS_ALIASES = { 'เสนอราคา': 'รอเสนอราคา', 'จัดคิวช่าง': 'รอจัดคิวช่าง', 'เรียบร้อย': 'เรียบร้อยปกติ' };
+// ย้ายไปสถานะเหล่านี้ = ต้องส่งช่างไปหน้างาน ลักษณะงานเป็น "แก้ไขหน้างาน" เสมอ
+const ON_SITE_STATUSES = ['กำลังดำเนินการ', 'รอจัดคิวช่าง'];
+
+const resolveStatus = (text) => {
+  const cleaned = String(text || '').replace(/\s+/g, '');
+  if (MOVE_STATUSES.includes(cleaned)) return cleaned;
+  if (STATUS_ALIASES[cleaned]) return STATUS_ALIASES[cleaned];
+  if (MOVE_STATUSES.includes(`รอ${cleaned}`)) return `รอ${cleaned}`;
+  return null;
+};
+
+// "แจ้งย้ายงาน / เลข MAR006189 (หรือแค่ 006189) / ไปเสนอราคา"
+const parseMoveMessage = (lines) => {
+  const fields = {};
+  for (const line of lines.slice(1)) {
+    const ticketMatch = line.match(/^(?:เลขที่งาน|เลขที่|เลข)\s*[:：]?\s*(\S+)/);
+    if (ticketMatch) {
+      fields.ticket = ticketMatch[1];
+      continue;
+    }
+    const statusMatch = line.match(/^(?:ไป|สถานะ\s*[:：]?)\s*(.+)$/);
+    if (statusMatch) {
+      fields.statusText = statusMatch[1].trim();
+      fields.status = resolveStatus(fields.statusText);
+    }
+  }
+  return fields;
+};
 
 // รองรับหลายคำสะกดของแต่ละ label เผื่อพนักงานพิมพ์ไม่ตรงเป๊ะ
 const LABEL_TO_FIELD = {
@@ -60,6 +93,7 @@ export const parseLineMessage = (text) => {
   let kind = null;
   if (lines[0].startsWith(TRIGGER_WORD)) kind = 'open';
   else if (lines[0].startsWith(CLOSE_TRIGGER_WORD)) kind = 'close';
+  else if (lines[0].startsWith(MOVE_TRIGGER_WORD)) return { kind: 'move', fields: parseMoveMessage(lines) };
   if (!kind) return null;
 
   const fields = {};
@@ -183,9 +217,57 @@ const closeRequestFromFields = async (fields) => {
   return request;
 };
 
+// รับได้ทั้งเลขเต็ม (MAR006189) และเลขท้าย 6 หลักอย่างเดียว (006189) ไม่สนตัวพิมพ์ใหญ่เล็ก
+const findRequestByTicket = async (ticketText) => {
+  const wanted = String(ticketText || '').trim().toUpperCase();
+  if (!wanted) return { request: null, reason: 'missing เลข' };
+
+  const isDigitsOnly = /^\d+$/.test(wanted);
+  const query = supabase.from('requests').select('id, ticket, status, completedAt');
+  const { data, error } = isDigitsOnly
+    ? await query.like('ticket', `%${wanted.padStart(6, '0')}`)
+    : await query.ilike('ticket', wanted);
+  if (error) throw error;
+
+  const matches = isDigitsOnly
+    ? data.filter((row) => (row.ticket.match(/(\d{1,6})$/)?.[1] || '').padStart(6, '0') === wanted.padStart(6, '0'))
+    : data;
+  if (matches.length === 0) return { request: null, reason: 'ticket not found' };
+  if (matches.length > 1) return { request: null, reason: `ambiguous: ${matches.map((m) => m.ticket).join(', ')}` };
+  return { request: matches[0] };
+};
+
+const moveRequestFromFields = async (fields) => {
+  if (!fields.status) {
+    recordHit({ moveSkipped: 'unknown status', statusText: fields.statusText || null });
+    return null;
+  }
+  const { request, reason } = await findRequestByTicket(fields.ticket);
+  if (!request) {
+    recordHit({ moveSkipped: reason, ticket: fields.ticket || null });
+    return null;
+  }
+
+  const updates = { status: fields.status };
+  if (ON_SITE_STATUSES.includes(fields.status)) updates.jobType = 'แก้ไขหน้างาน';
+  // ย้ายไปเรียบร้อยปกติ: ใส่วันเวลาเสร็จให้ด้วย (ถ้ายังไม่มี) ไม่งั้นรายงานประจำวันนับไม่เจอ
+  if (fields.status === 'เรียบร้อยปกติ' && !request.completedAt) updates.completedAt = new Date().toISOString();
+
+  const { error } = await supabase.from('requests').update(updates).eq('id', request.id);
+  if (error) throw error;
+  recordHit({ moved: request.ticket, from: request.status, to: fields.status });
+  return request;
+};
+
 const handleTextMessage = async (groupKey, text) => {
   const parsed = parseLineMessage(text);
   if (!parsed) return; // ไม่ขึ้นต้นด้วยคำ trigger ถือเป็นข้อความคุยเล่นทั่วไป ไม่สนใจ
+
+  if (parsed.kind === 'move') {
+    activeByGroup.delete(groupKey); // ย้ายงานไม่มีรูป กันรูปที่ส่งตามมาไปติดงานที่เปิด/ปิดก่อนหน้า
+    await moveRequestFromFields(parsed.fields);
+    return;
+  }
 
   if (parsed.kind === 'close') {
     const request = await closeRequestFromFields(parsed.fields);
