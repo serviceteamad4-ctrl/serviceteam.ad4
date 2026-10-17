@@ -422,3 +422,11 @@ body {
   background: #fff;
   box-shadow: 0 3px 10px rgba(24, 36, 43, 0.15);
 }
+
+/* การ์ดรายละเอียดที่อยู่ในแผงขวา: แผงมีพื้น/ขอบของตัวเองแล้ว การ์ดข้างในต้องโปร่ง
+   ไม่งั้นธีมที่ตั้งสีกล่องจะทาสีซ้อน 2 ชั้น เห็นเป็นกล่องในกล่องที่ขอบซ้ายถูกตัด */
+.detail-embedded .detail-card {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}

@@ -17,6 +17,8 @@ export const DEFAULT_THEME = {
   tableHeadTextColor: null,
   inputColor: null,
   panelOpacity: null, // % ความทึบของกล่องเนื้อหา null = 100 (ทึบ)
+  // สีเน้นตัวเดียวคุมจุดที่เดิมเป็นสีตายตัว: แถวที่เลือก แถบหัวกลุ่ม หัวข้อในหน้ารายละเอียด เมนูที่เลือก
+  accentColor: null,
 };
 
 // ค่าที่โชว์ในตัวเลือกสีตอนยังไม่ได้ตั้ง (ตรงกับสีเดิมใน modern-ui.css / styles.css)
@@ -32,6 +34,7 @@ export const THEME_FALLBACKS = {
   borderColor: '#e4e9e8',
   tableHeadTextColor: '#59627a',
   inputColor: '#ffffff',
+  accentColor: '#087f75',
 };
 
 // ช่องที่เป็น "พื้น" เลือกได้ทั้งสีเดียว ("#rrggbb") หรือไล่สี ({ from, to, angle })
@@ -111,7 +114,7 @@ export const buildThemeCss = (theme) => {
   }
   if (theme.textColor) {
     // ป้ายบนการ์ดสรุป ("งานทั้งหมดในหน้านี้" ฯลฯ) เดิมเป็นสีเทาจาง ให้ตามสีตัวหนังสือแบบจางลงนิดหน่อย
-    rules.push(`.metric label { color: ${theme.textColor} !important; opacity: 0.8; }`);
+    rules.push(`.metric label, .detail-field span, .daily-report-head small { color: ${theme.textColor} !important; opacity: 0.75; }`);
   }
   if (theme.inputColor) {
     // ช่องค้นหา ช่องเดือน ช่องสถานะ (สีขาวตั้งไว้ในโค้ดตรงๆ) ตัวหนังสือในช่องตัดกับพื้นช่องเสมอ
@@ -159,10 +162,26 @@ export const buildThemeCss = (theme) => {
     // ถ้าตั้งตัวหนังสือสีขาว ปุ่มจะว่างเปล่า จึงต้องให้ตัวหนังสือในปุ่มตัดกับพื้นปุ่มเสมอ
     rules.push(`.secondary-btn { color: ${readableTextOn(THEME_FALLBACKS.secondaryButtonColor)} !important; }`);
   }
-  if (theme.borderColor) {
-    rules.push(`:root { --line-color: ${theme.borderColor}; }`);
-    rules.push(`.metric, .ui-toolbar, .table-wrap, .ui-card, .detail-card, .requests-split-detail, .secondary-btn, .daily-sheet-card { border-color: ${theme.borderColor} !important; }`);
-    rules.push(`.sheet-date, .sheet-label, .sheet-value, .sheet-number, .sheet-child, .sheet-child-value, .detail-status, .detail-section-title { border-color: ${theme.borderColor} !important; }`);
+  if (theme.accentColor) {
+    const accent = theme.accentColor;
+    // วางหลังกฎของกล่องเนื้อหา เพื่อให้แถบหัวกลุ่ม/หัวคอลัมน์ใช้โทนสีเน้นแทนสีเทา
+    rules.push(`:root { --row-selected-bg: ${hexToRgba(accent, 0.3)}; --row-highlight-bg: ${hexToRgba(accent, 0.16)}; --table-group-bg: ${hexToRgba(accent, 0.2)}; --table-head-bg: ${hexToRgba(accent, 0.08)}; --teal: ${accent}; }`);
+    rules.push(`.detail-section-title { color: ${accent} !important; }`);
+    rules.push(`.sidebar .nav-item.active { background: linear-gradient(90deg, ${hexToRgba(accent, 0.4)}, ${hexToRgba(accent, 0.08)}) !important; box-shadow: inset 3px 0 ${accent} !important; }`);
+  }
+
+  // เส้นขอบ: ถ้าผู้ใช้เลือกสีเอง ใช้สีนั้นแบบจางลง (เส้นสีทึบเต็มๆ ดูแข็ง) ถ้าไม่ได้เลือกแต่เปลี่ยนสีกล่อง/พื้นหลังแล้ว
+  // ใช้เส้นโปร่งแสงอัตโนมัติ (ขาวจางบนพื้นเข้ม ดำจางบนพื้นอ่อน) แทนเส้นเทาเดิมที่ขัดกับสีที่ตั้ง
+  let line = theme.borderColor ? hexToRgba(theme.borderColor, 0.6) : null;
+  if (!line && (theme.panelColor || theme.pageColor || panelOpacity < 1)) {
+    const panelBase = theme.panelColor || THEME_FALLBACKS.panelColor;
+    const lum = isGradient(panelBase) ? (luminanceOf(panelBase.from) + luminanceOf(panelBase.to)) / 2 : luminanceOf(panelBase);
+    line = lum < 0.5 ? 'rgba(255, 255, 255, 0.14)' : 'rgba(0, 0, 0, 0.08)';
+  }
+  if (line) {
+    rules.push(`:root { --line-color: ${line}; }`);
+    rules.push(`.metric, .ui-toolbar, .table-wrap, .ui-card, .detail-card, .requests-split-detail, .secondary-btn, .daily-sheet-card { border-color: ${line} !important; }`);
+    rules.push(`.sheet-date, .sheet-label, .sheet-value, .sheet-number, .sheet-child, .sheet-child-value, .detail-status, .detail-section-title { border-color: ${line} !important; }`);
   }
   if (theme.fontScale && theme.fontScale !== 100) {
     // ขนาดตัวหนังสือในเว็บกำหนดเป็น px ตายตัวหลายร้อยจุด จึงขยายทั้งส่วนเนื้อหาด้วย zoom แทน
@@ -171,6 +190,71 @@ export const buildThemeCss = (theme) => {
   }
   return rules.join('\n');
 };
+
+// ธีมสำเร็จรูป: จับคู่สีมาให้เข้ากันทุกจุด กดแล้วยังปรับต่อเองได้
+const g = (from, to, angle = 135, mix = 50) => ({ from, to, angle, mix });
+export const THEME_PRESETS = [
+  { name: 'ค่าเริ่มต้น', theme: {} },
+  {
+    name: 'Midnight',
+    theme: {
+      sidebarColor: g('#0b1120', '#1e293b', 180), sidebarTextColor: '#cbd5e1',
+      topbarColor: '#0f172a', pageColor: g('#0b1120', '#1e1b4b', 135),
+      panelColor: '#111827', panelOpacity: 85, textColor: '#e5e7eb', tableHeadTextColor: '#94a3b8',
+      primaryButtonColor: g('#6366f1', '#8b5cf6', 90), secondaryButtonColor: '#1f2937', inputColor: '#1f2937',
+      accentColor: '#818cf8',
+    },
+  },
+  {
+    name: 'Royal Magenta',
+    theme: {
+      sidebarColor: g('#1a0024', '#4a0a4a', 180), sidebarTextColor: '#f0d9ff',
+      topbarColor: '#1a0024', pageColor: g('#12001f', '#7b0c7b', 135),
+      panelColor: '#24062e', panelOpacity: 80, textColor: '#f8e9ff', tableHeadTextColor: '#e0a8f0',
+      primaryButtonColor: g('#c026d3', '#7c3aed', 90), secondaryButtonColor: '#3b0f47', inputColor: '#2b0a35',
+      accentColor: '#e879f9',
+    },
+  },
+  {
+    name: 'Sunset',
+    theme: {
+      sidebarColor: g('#3a1c71', '#d76d77', 180), sidebarTextColor: '#fde2e4',
+      topbarColor: '#fff5ee', pageColor: g('#ff7e5f', '#feb47b', 135),
+      panelColor: '#ffffff', panelOpacity: 80, textColor: '#3b1f2b', tableHeadTextColor: '#8a4b5c',
+      primaryButtonColor: g('#ee0979', '#ff6a00', 90), secondaryButtonColor: '#ffffff', inputColor: '#ffffff',
+      accentColor: '#e8590c',
+    },
+  },
+  {
+    name: 'Ocean',
+    theme: {
+      sidebarColor: g('#01579b', '#0288d1', 180), sidebarTextColor: '#e1f5fe',
+      topbarColor: '#ffffff', pageColor: g('#e0f7fa', '#80deea', 180),
+      panelColor: '#ffffff', panelOpacity: 85, textColor: '#0b3954', tableHeadTextColor: '#3d6b88',
+      primaryButtonColor: g('#0288d1', '#26c6da', 90), secondaryButtonColor: '#ffffff', inputColor: '#ffffff',
+      accentColor: '#0288d1',
+    },
+  },
+  {
+    name: 'Forest',
+    theme: {
+      sidebarColor: g('#1b4332', '#2d6a4f', 180), sidebarTextColor: '#d8f3dc',
+      topbarColor: '#ffffff', pageColor: g('#eef5ee', '#cfe3cf', 180),
+      panelColor: '#ffffff', panelOpacity: 90, textColor: '#1b2e24', tableHeadTextColor: '#52734d',
+      primaryButtonColor: g('#2d6a4f', '#40916c', 90), secondaryButtonColor: '#ffffff', inputColor: '#ffffff',
+      accentColor: '#2d6a4f',
+    },
+  },
+];
+
+// ตัวอย่างหน้าตาธีมบนการ์ดเลือกธีม
+export const presetPreview = (preset) => ({
+  sidebar: toCssFill(preset.theme.sidebarColor || THEME_FALLBACKS.sidebarColor),
+  page: toCssFill(preset.theme.pageColor || THEME_FALLBACKS.pageColor),
+  panel: preset.theme.panelColor || THEME_FALLBACKS.panelColor,
+  accent: preset.theme.accentColor || THEME_FALLBACKS.accentColor,
+  button: toCssFill(preset.theme.primaryButtonColor || THEME_FALLBACKS.primaryButtonColor),
+});
 
 // ย่อรูปก่อนเก็บ เพราะ localStorage จุได้ราว 5MB และรูปจากมือถือมักใหญ่หลาย MB
 export const resizeImageToDataUrl = (file, maxSize = 1920) => new Promise((resolve, reject) => {

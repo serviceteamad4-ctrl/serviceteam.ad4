@@ -925,7 +925,7 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
                   ))}
                   {group.items.map((request) => {
                     const rowHighlight = {
-                      backgroundColor: request.id === selectedId ? '#e7f1fb' : request.id === highlightId ? '#fff4d6' : 'transparent',
+                      backgroundColor: request.id === selectedId ? 'var(--row-selected-bg, #e7f1fb)' : request.id === highlightId ? 'var(--row-highlight-bg, #fff4d6)' : 'transparent',
                       transition: 'background-color 1.2s ease',
                     };
                     const cellStyle = { padding: '10px 10px', borderBottom: '1px solid var(--line-color, #eef1ef)', borderRight: '1px solid var(--line-color, #eef1ef)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', ...rowHighlight };

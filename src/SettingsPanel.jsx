@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
-  DEFAULT_THEME, THEME_FALLBACKS, GRADIENT_DIRECTIONS, isGradient, toCssFill, gradientMix, luminanceOf, resizeImageToDataUrl,
+  DEFAULT_THEME, THEME_FALLBACKS, THEME_PRESETS, presetPreview, GRADIENT_DIRECTIONS, isGradient, toCssFill, gradientMix,
+  luminanceOf, resizeImageToDataUrl,
 } from './theme.js';
 
 const rowStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '14px 0', borderBottom: '1px solid #eef1ef' };
@@ -109,13 +110,39 @@ export default function SettingsPanel({ theme, onChange, onClose }) {
 
   return (
     <div className="modal" onClick={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="modal-panel" style={{ maxWidth: '520px' }}>
+      <div className="modal-panel" style={{ maxWidth: '560px' }}>
         <div className="modal-head">
           <h2 style={{ color: '#18242b' }}>⚙ ตั้งค่าหน้าตา</h2>
           <button className="icon-btn" type="button" onClick={onClose}>×</button>
         </div>
 
-        <h3 style={{ margin: '4px 0 0', fontSize: '13px', color: '#087f75' }}>แถบเมนูซ้าย</h3>
+        <h3 style={{ margin: '4px 0 10px', fontSize: '13px', color: '#087f75' }}>ธีมสำเร็จรูป (กดแล้วปรับต่อด้านล่างได้)</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px', marginBottom: '8px' }}>
+          {THEME_PRESETS.map((preset) => {
+            const look = presetPreview(preset);
+            return (
+              <button
+                key={preset.name}
+                type="button"
+                // คงรูปพื้นหลังกับขนาดตัวหนังสือที่ตั้งไว้ เปลี่ยนเฉพาะชุดสี
+                onClick={() => onChange({ ...DEFAULT_THEME, backgroundImage: theme.backgroundImage, fontScale: theme.fontScale, ...preset.theme })}
+                style={{ padding: 0, border: '1px solid #dfe6e4', borderRadius: '12px', overflow: 'hidden', cursor: 'pointer', background: '#fff', textAlign: 'left' }}
+              >
+                <div style={{ display: 'flex', height: '64px' }}>
+                  <div style={{ width: '22%', background: look.sidebar }} />
+                  <div style={{ flex: 1, background: look.page, padding: '8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    <div style={{ height: '8px', width: '45%', borderRadius: '4px', background: look.button }} />
+                    <div style={{ flex: 1, borderRadius: '6px', background: look.panel, opacity: 0.9, borderTop: `3px solid ${look.accent}` }} />
+                  </div>
+                </div>
+                <div style={{ padding: '6px 8px', fontSize: '12px', color: '#18242b' }}>{preset.name}</div>
+              </button>
+            );
+          })}
+        </div>
+        <ColorRow label="สีเน้น (แถวที่เลือก แถบหัวกลุ่ม หัวข้อ เมนูที่เลือก)" field="accentColor" theme={theme} onChange={onChange} />
+
+        <h3 style={{ margin: '18px 0 0', fontSize: '13px', color: '#087f75' }}>แถบเมนูซ้าย</h3>
         <FillRow label="สีแถบเมนูซ้าย" field="sidebarColor" theme={theme} onChange={onChange} />
         <ColorRow label="สีตัวหนังสือแถบเมนูซ้าย" field="sidebarTextColor" theme={theme} onChange={onChange} />
 
