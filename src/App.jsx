@@ -135,7 +135,9 @@ const readRequests = async () => {
 };
 
 const buildTrackingPrefix = (customer = '') => {
-  const cleaned = String(customer || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase();
+  // ตัวอักษรอังกฤษเท่านั้น: ชื่อไทยที่มีเลขปน (เช่น "ทดสอบระบบ02") จะได้เลขที่งานเป็นตัวเลขล้วน
+  // ซึ่ง /^\D+(\d{1,6})$/ ด้านล่างจับเลขวิ่งไม่ได้ ทำให้เลขซ้ำ/ถอยหลัง
+  const cleaned = String(customer || '').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
   return cleaned || 'REQ';
 };
 

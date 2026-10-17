@@ -20,12 +20,27 @@ const LABEL_TO_FIELD = {
   'ปัญหา': 'description',
 };
 
-// รอข้อความ/รูปที่ตามมาจากกลุ่มเดียวกันสักครู่ก่อนสรุปผล เพราะ LINE ส่งแต่ละรูปเป็นคนละ event
-// ถึงผู้ใช้จะเลือกส่งพร้อมกันหลายรูปในแชทก็ตาม
-const COLLECT_WINDOW_MS = 6000;
+// สร้างงานทันทีที่ได้ข้อความ "แจ้งเปิดงาน" แล้วรูปที่ส่งตามมาในกลุ่มเดียวกันภายในเวลานี้จะติดไปกับงานนั้น
+// (เลือกรูปจากมือถือมักใช้เวลาหลายสิบวินาที รอสั้นๆ ไม่พอ)
+const IMAGE_WINDOW_MS = 5 * 60 * 1000;
 
-// key: groupId (หรือ userId ถ้าทักมาเดี่ยวๆ) -> { fields, images: [{url, messageId}], timer }
-const pendingByGroup = new Map();
+// key: groupId (หรือ userId ถ้าทักมาเดี่ยวๆ) -> งานล่าสุดที่เปิดจากกลุ่มนั้น
+// { requestId, ticket, images: [{url, messageId}], pendingId, expiresAt }
+const activeByGroup = new Map();
+
+// LINE ส่งแต่ละรูปเป็นคนละ webhook ซึ่งอาจมาซ้อนกัน ต้องประมวลผลทีละอันต่อกลุ่ม
+// ไม่งั้นนับจำนวนรูปพลาด (เช่น 2 รูปมาพร้อมกันแล้วต่างคนต่างคิดว่าเป็นรูปแรก)
+const queueByGroup = new Map();
+const runInGroupOrder = (groupKey, task) => {
+  const next = (queueByGroup.get(groupKey) || Promise.resolve())
+    .then(task)
+    .catch((error) => {
+      console.error('LINE: event handling failed', error);
+      recordHit({ error: error?.message || JSON.stringify(error) });
+    });
+  queueByGroup.set(groupKey, next);
+  return next;
+};
 
 export const parseLineMessage = (text) => {
   const lines = String(text || '').split('\n').map((line) => line.trim()).filter(Boolean);
@@ -55,8 +70,10 @@ const verifySignature = (rawBody, signature, channelSecret) => {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 };
 
+// เอาเฉพาะตัวอักษรอังกฤษ ไม่เอาตัวเลข: ชื่อลูกค้าภาษาไทยที่มีเลขปน (เช่น "ทดสอบระบบ02")
+// จะได้เลขที่งานเป็นตัวเลขล้วน "02006197" ซึ่งรูปแบบ /^\D+\d+$/ จับเลขวิ่งไม่ได้ ทำให้เลขซ้ำ/ถอยหลัง
 const buildTrackingPrefix = (customer = '') => {
-  const cleaned = String(customer || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase();
+  const cleaned = String(customer || '').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
   return cleaned || 'REQ';
 };
 
@@ -113,66 +130,54 @@ const createRequestFromFields = async (fields) => {
   return data;
 };
 
-// ปิดรอบ: สร้างงานจริง + ใส่รูปตามจำนวนที่ได้รับ (0 = ไม่ใส่, 1 = ใส่เลย, 2+ = พักไว้ให้เลือกในเว็บ)
-const finalizePending = async (groupKey) => {
-  const pending = pendingByGroup.get(groupKey);
-  if (!pending) return;
-  pendingByGroup.delete(groupKey);
-
-  try {
-    const request = await createRequestFromFields(pending.fields);
-
-    if (pending.images.length === 1) {
-      await supabase.from('requests').update({ image: pending.images[0].url }).eq('id', request.id);
-    } else if (pending.images.length > 1) {
-      await supabase.from('line_pending_images').insert({
-        request_id: request.id,
-        ticket: request.ticket,
-        images: pending.images,
-        source_group_id: groupKey,
-      });
-    }
-    console.log(`LINE: created request ${request.ticket} (${pending.images.length} image(s))`);
-    recordHit({ created: request.ticket, images: pending.images.length });
-  } catch (error) {
-    console.error('LINE: failed to finalize pending request', error);
-    recordHit({ finalizeError: error?.message || JSON.stringify(error) });
-  }
-};
-
-const handleTextMessage = (groupKey, text) => {
+const handleTextMessage = async (groupKey, text) => {
   const fields = parseLineMessage(text);
   if (!fields) return; // ไม่ขึ้นต้นด้วยคำ trigger ถือเป็นข้อความคุยเล่นทั่วไป ไม่สนใจ
 
-  const existing = pendingByGroup.get(groupKey);
-  if (existing) clearTimeout(existing.timer);
-
-  const entry = { fields, images: existing?.images || [] };
-  entry.timer = setTimeout(() => finalizePending(groupKey), COLLECT_WINDOW_MS);
-  pendingByGroup.set(groupKey, entry);
+  const request = await createRequestFromFields(fields);
+  activeByGroup.set(groupKey, {
+    requestId: request.id,
+    ticket: request.ticket,
+    images: [],
+    pendingId: null,
+    expiresAt: Date.now() + IMAGE_WINDOW_MS,
+  });
+  console.log(`LINE: created request ${request.ticket}`);
+  recordHit({ created: request.ticket });
 };
 
+// รูปที่ส่งตามมาหลัง "แจ้งเปิดงาน": รูปแรกใส่ให้งานเลย ถ้ามีรูปที่ 2 ขึ้นไป ไม่เดาเอง
+// ถอดรูปออกจากงานแล้วย้ายทุกรูปไปพักใน line_pending_images ให้คนเลือกในหน้าเว็บ
 const handleImageMessage = async (groupKey, messageId, accessToken, requestOrigin) => {
-  // รูปอาจส่งมาก่อนข้อความ trigger (เรียงไม่แน่นอน) ถ้ายังไม่มี pending ของกลุ่มนี้ให้รอเงียบๆ ไว้ก่อน
-  // (สร้าง entry เปล่าไว้ก่อน ถ้าไม่มีข้อความ trigger ตามมาเลยภายใน window ก็จะไม่ถูกสร้างเป็นงาน)
-  let entry = pendingByGroup.get(groupKey);
-  if (!entry) {
-    entry = { fields: null, images: [] };
-    pendingByGroup.set(groupKey, entry);
+  const active = activeByGroup.get(groupKey);
+  if (!active || Date.now() > active.expiresAt) {
+    // รูปที่ส่งคุยกันทั่วไป ไม่ได้ตามหลังการแจ้งเปิดงาน ไม่ต้องโหลดเก็บ
+    recordHit({ imageIgnored: 'no แจ้งเปิดงาน from this group in the last 5 minutes' });
+    return;
   }
 
-  try {
-    const buffer = await downloadLineImage(messageId, accessToken);
-    const url = await storeImage('service-desk-images', buffer, `${messageId}.jpg`, requestOrigin);
-    entry.images.push({ url, messageId });
-  } catch (error) {
-    console.error('LINE: failed to download/store image', messageId, error);
-  }
+  const buffer = await downloadLineImage(messageId, accessToken);
+  const url = await storeImage('service-desk-images', buffer, `${messageId}.jpg`, requestOrigin);
+  active.images.push({ url, messageId });
 
-  if (entry.fields) {
-    clearTimeout(entry.timer);
-    entry.timer = setTimeout(() => finalizePending(groupKey), COLLECT_WINDOW_MS);
+  if (active.images.length === 1) {
+    const { error } = await supabase.from('requests').update({ image: url }).eq('id', active.requestId);
+    if (error) throw error;
+  } else if (!active.pendingId) {
+    const { error: clearError } = await supabase.from('requests').update({ image: null }).eq('id', active.requestId);
+    if (clearError) throw clearError;
+    const { data, error } = await supabase
+      .from('line_pending_images')
+      .insert({ request_id: active.requestId, ticket: active.ticket, images: active.images, source_group_id: groupKey })
+      .select('id')
+      .single();
+    if (error) throw error;
+    active.pendingId = data.id;
+  } else {
+    const { error } = await supabase.from('line_pending_images').update({ images: active.images }).eq('id', active.pendingId);
+    if (error) throw error;
   }
+  recordHit({ attachedImage: active.ticket, imageCount: active.images.length });
 };
 
 export const lineRouter = express.Router();
@@ -220,9 +225,9 @@ lineRouter.post('/webhook', async (req, res) => {
     if (!groupKey) continue;
 
     if (event.type === 'message' && event.message?.type === 'text') {
-      handleTextMessage(groupKey, event.message.text);
+      runInGroupOrder(groupKey, () => handleTextMessage(groupKey, event.message.text));
     } else if (event.type === 'message' && event.message?.type === 'image') {
-      await handleImageMessage(groupKey, event.message.id, accessToken, requestOrigin);
+      runInGroupOrder(groupKey, () => handleImageMessage(groupKey, event.message.id, accessToken, requestOrigin));
     }
   }
 });
