@@ -661,7 +661,6 @@ function App() {
               </button>
             )}
             <span>{requests.length} รายการ</span>
-            <button className="avatar">A</button>
           </div>
         </header>
 
