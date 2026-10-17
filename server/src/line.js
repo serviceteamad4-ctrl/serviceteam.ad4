@@ -22,7 +22,7 @@ const LABEL_TO_FIELD = {
 
 // สร้างงานทันทีที่ได้ข้อความ "แจ้งเปิดงาน" แล้วรูปที่ส่งตามมาในกลุ่มเดียวกันภายในเวลานี้จะติดไปกับงานนั้น
 // (เลือกรูปจากมือถือมักใช้เวลาหลายสิบวินาที รอสั้นๆ ไม่พอ)
-const IMAGE_WINDOW_MS = 5 * 60 * 1000;
+const IMAGE_WINDOW_MS = 60 * 1000;
 
 // key: groupId (หรือ userId ถ้าทักมาเดี่ยวๆ) -> งานล่าสุดที่เปิดจากกลุ่มนั้น
 // { requestId, ticket, images: [{url, messageId}], pendingId, expiresAt }
@@ -152,7 +152,7 @@ const handleImageMessage = async (groupKey, messageId, accessToken, requestOrigi
   const active = activeByGroup.get(groupKey);
   if (!active || Date.now() > active.expiresAt) {
     // รูปที่ส่งคุยกันทั่วไป ไม่ได้ตามหลังการแจ้งเปิดงาน ไม่ต้องโหลดเก็บ
-    recordHit({ imageIgnored: 'no แจ้งเปิดงาน from this group in the last 5 minutes' });
+    recordHit({ imageIgnored: 'no แจ้งเปิดงาน from this group in the last minute' });
     return;
   }
 
