@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  DEFAULT_THEME, THEME_FALLBACKS, GRADIENT_DIRECTIONS, isGradient, toCssFill, luminanceOf, resizeImageToDataUrl,
+  DEFAULT_THEME, THEME_FALLBACKS, GRADIENT_DIRECTIONS, isGradient, toCssFill, gradientMix, luminanceOf, resizeImageToDataUrl,
 } from './theme.js';
 
 const rowStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '14px 0', borderBottom: '1px solid #eef1ef' };
@@ -38,7 +38,7 @@ function FillRow({ label, field, theme, onChange }) {
 
   const toGradient = () => onChange({
     // สีที่ 2 เริ่มต้น: ตัดกับสีแรก จะได้เห็นการไล่สีชัดตั้งแต่กดครั้งแรก
-    [field]: { from: solid, to: luminanceOf(solid) > 0.5 ? '#3a3f9e' : '#9fd3ff', angle: 135 },
+    [field]: { from: solid, to: luminanceOf(solid) > 0.5 ? '#3a3f9e' : '#9fd3ff', angle: 135, mix: 50 },
   });
   const toSolid = () => onChange({ [field]: gradient ? value.from : solid });
   const setPart = (part, partValue) => onChange({ [field]: { ...value, [part]: partValue } });
@@ -63,12 +63,27 @@ function FillRow({ label, field, theme, onChange }) {
             >
               {GRADIENT_DIRECTIONS.map((direction) => <option key={direction.angle} value={direction.angle}>{direction.label}</option>)}
             </select>
-            <span title="ตัวอย่าง" style={{ width: '40px', height: '32px', borderRadius: '8px', border: '1px solid #dfe6e4', background: toCssFill(value) }} />
+            <span title="ตัวอย่าง" style={{ width: '56px', height: '32px', borderRadius: '8px', border: '1px solid #dfe6e4', background: toCssFill(value) }} />
           </>
         ) : (
           <input type="color" value={solid} onChange={(event) => onChange({ [field]: event.target.value })} style={colorInputStyle} />
         )}
       </div>
+      {gradient && (
+        <div style={{ flexBasis: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px' }}>
+          <span style={{ fontSize: '12px', color: '#718087' }}>สีแรกเด่น</span>
+          <input
+            type="range"
+            min="5"
+            max="95"
+            step="5"
+            value={gradientMix(value)}
+            onChange={(event) => setPart('mix', Number(event.target.value))}
+            style={{ width: '180px', accentColor: value.from, cursor: 'pointer' }}
+          />
+          <span style={{ fontSize: '12px', color: '#18242b', minWidth: '36px', textAlign: 'right' }}>{gradientMix(value)}%</span>
+        </div>
+      )}
     </div>
   );
 }

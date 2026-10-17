@@ -39,8 +39,11 @@ export const GRADIENT_DIRECTIONS = [
 
 export const isGradient = (value) => Boolean(value && typeof value === 'object');
 
+// mix = สีแรกเด่นกี่ % (จุดกึ่งกลางการผสม 2 สี) ไม่ได้ตั้ง = 50 เท่ากับไล่สีปกติ
+export const gradientMix = (value) => (typeof value?.mix === 'number' ? value.mix : 50);
+
 export const toCssFill = (value) => (isGradient(value)
-  ? `linear-gradient(${value.angle}deg, ${value.from}, ${value.to})`
+  ? `linear-gradient(${value.angle}deg, ${value.from}, ${gradientMix(value)}%, ${value.to})`
   : value);
 
 export const luminanceOf = (hex) => {
@@ -51,7 +54,10 @@ export const luminanceOf = (hex) => {
 
 // สีตัวหนังสือบนปุ่ม: ขาวบนสีเข้ม ดำบนสีอ่อน (ไล่สีใช้ค่าเฉลี่ยของ 2 สี) ผู้ใช้ไม่ต้องตั้งเอง และอ่านออกเสมอ
 const readableTextOn = (fill) => {
-  const luminance = isGradient(fill) ? (luminanceOf(fill.from) + luminanceOf(fill.to)) / 2 : luminanceOf(fill);
+  const weight = isGradient(fill) ? gradientMix(fill) / 100 : 1;
+  const luminance = isGradient(fill)
+    ? luminanceOf(fill.from) * weight + luminanceOf(fill.to) * (1 - weight)
+    : luminanceOf(fill);
   return luminance > 0.6 ? '#18242b' : '#ffffff';
 };
 
