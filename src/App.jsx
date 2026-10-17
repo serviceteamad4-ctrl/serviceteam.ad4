@@ -848,7 +848,7 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
       <div className="page-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
         <label className="search-box" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 0', minWidth: '0', height: '42px', border: '1px solid #dfe6e4', borderRadius: '14px', background: '#fff', padding: '0 10px 0 8px', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>
           <span className="field-icon" aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', border: '1px solid #dfe6e4', borderRadius: '8px', background: '#f7faf9', color: '#6f7f7d', fontSize: '14px', flexShrink: 0, lineHeight: 1 }}>⌕</span>
-          <input type="search" placeholder="ค้นหาลูกค้า เลขติดตาม สถานที่..." value={query} onChange={(event) => setQuery(event.target.value)} style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', flex: '1', font: 'inherit', color: 'var(--ink)', padding: 0, margin: 0 }} />
+          <input type="search" placeholder="ค้นหาลูกค้า เลขติดตาม สถานที่..." value={query} onChange={(event) => setQuery(event.target.value)} style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', flex: '1', font: 'inherit', color: '#18242b', padding: 0, margin: 0 }} />
         </label>
         <button className="primary-btn ui-button" onClick={onAdd} style={{ flexShrink: 0 }}><span>+</span> เพิ่มงานใหม่</button>
       </div>
@@ -869,9 +869,9 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
             if (typeof input.showPicker === 'function') input.showPicker();
             else input.focus();
           }} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', border: '1px solid #dfe6e4', borderRadius: '8px', background: '#f7faf9', color: '#6f7f7d', fontSize: '14px', flexShrink: 0, lineHeight: 1, padding: 0, cursor: 'pointer' }}>📆</button>
-          <input ref={monthInputRef} type="month" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', minWidth: 0, flex: '1', font: 'inherit', color: 'var(--ink)', padding: 0, margin: 0, cursor: 'pointer' }} />
+          <input ref={monthInputRef} type="month" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', minWidth: 0, flex: '1', font: 'inherit', color: '#18242b', padding: 0, margin: 0, cursor: 'pointer' }} />
         </label>
-        <select value={status} onChange={(event) => setStatus(event.target.value)} style={{ minWidth: '170px', flex: '0 0 170px', height: '42px', borderRadius: '14px', border: '1px solid #dfe6e4', padding: '0 12px', background: '#fff', color: 'var(--ink)', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>
+        <select value={status} onChange={(event) => setStatus(event.target.value)} style={{ minWidth: '170px', flex: '0 0 170px', height: '42px', borderRadius: '14px', border: '1px solid #dfe6e4', padding: '0 12px', background: '#fff', color: '#18242b', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>
           <option>ทั้งหมด</option>
           <option>รับเรื่อง</option>
           <option>รอดำเนินการ</option>
@@ -908,13 +908,13 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
               <div style={{ padding: '28px 20px', color: '#718087' }}>ไม่มีงานในเงื่อนไขนี้</div>
             ) : groupedStatuses.map((group) => (
               <div key={group.status} style={{ borderBottom: '1px solid #eef1ef' }}>
-                <div style={{ background: 'linear-gradient(135deg, #f4f9f9 0%, #eef3f3 100%)', padding: '10px 14px', fontSize: '14px', fontWeight: 600, color: 'var(--ink)', borderBottom: '1px solid #e4e9e8' }}>
+                <div style={{ background: 'var(--table-group-bg, linear-gradient(135deg, #f4f9f9 0%, #eef3f3 100%))', padding: '10px 14px', fontSize: '14px', fontWeight: 600, color: 'var(--ink)', borderBottom: '1px solid #e4e9e8' }}>
                   {group.status}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: compact ? '1.4fr 1.2fr 1.4fr' : '1.3fr 0.8fr 1.3fr 1.7fr 1.2fr 0.8fr', fontSize: '12px', color: 'var(--ink)' }}>
                   {(compact ? ['ลูกค้า', 'เลขติดตาม', 'สถานที่/สาขา'] : ['ลูกค้า', 'อ้างอิง', 'เลขติดตาม', 'สถานที่/สาขา', 'ผู้ดำเนินการ', 'จัดการ']).map((label) => (
-                    <div key={label} style={{ padding: '8px 10px', background: '#f7f8fc', borderBottom: '1px solid #dfe3ee', borderRight: '1px solid #eef1ef', fontWeight: 700, color: '#59627a' }}>{label}</div>
+                    <div key={label} style={{ padding: '8px 10px', background: 'var(--table-head-bg, #f7f8fc)', borderBottom: '1px solid #dfe3ee', borderRight: '1px solid #eef1ef', fontWeight: 700, color: 'var(--table-head-text, #59627a)' }}>{label}</div>
                   ))}
                   {group.items.map((request) => {
                     const rowHighlight = {

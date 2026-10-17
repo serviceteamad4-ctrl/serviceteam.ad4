@@ -8,6 +8,10 @@ export const DEFAULT_THEME = {
   pageColor: null,
   backgroundImage: null,
   textColor: null,
+  topbarColor: null,
+  panelColor: null,
+  primaryButtonColor: null,
+  secondaryButtonColor: null,
 };
 
 // ค่าที่โชว์ในตัวเลือกสีตอนยังไม่ได้ตั้ง (ตรงกับสีเดิมใน modern-ui.css / styles.css)
@@ -16,6 +20,18 @@ export const THEME_FALLBACKS = {
   sidebarTextColor: '#a9cfcc',
   pageColor: '#f5f6fb',
   textColor: '#18242b',
+  topbarColor: '#ffffff',
+  panelColor: '#ffffff',
+  primaryButtonColor: '#5b5ce2',
+  secondaryButtonColor: '#ffffff',
+};
+
+// สีตัวหนังสือบนปุ่ม: ขาวบนสีเข้ม ดำบนสีอ่อน ผู้ใช้ไม่ต้องตั้งเอง และอ่านออกเสมอ
+const readableTextOn = (hex) => {
+  const value = hex.replace('#', '');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(value.slice(i, i + 2), 16));
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '#18242b' : '#ffffff';
 };
 
 export const loadTheme = () => {
@@ -53,8 +69,23 @@ export const buildThemeCss = (theme) => {
     const color = theme.pageColor || THEME_FALLBACKS.pageColor;
     const image = theme.backgroundImage ? `url("${theme.backgroundImage}") center / cover no-repeat fixed, ` : '';
     rules.push(`body { background: ${image}${color} !important; }`);
-    // แถบด้านบนเดิมเป็นสีขาวโปร่ง ให้โปร่งขึ้นเพื่อเห็นพื้นหลังที่ตั้ง
-    rules.push('.topbar { background: rgba(255, 255, 255, 0.55) !important; }');
+  }
+  // แถบด้านบนกับกล่องตัวกรองเดิมเป็นสีขาวโปร่งแสง วางบนพื้นหลังสีเข้มแล้วกลายเป็นสีเทา
+  // ตั้งสีแล้วให้เป็นสีทึบตามที่เลือก
+  if (theme.topbarColor) {
+    rules.push(`.topbar { background: ${theme.topbarColor} !important; backdrop-filter: none !important; }`);
+  }
+  if (theme.panelColor) {
+    rules.push(`.ui-toolbar, .metric, .table-wrap, .detail-card, .requests-split-detail { background: ${theme.panelColor} !important; backdrop-filter: none !important; }`);
+    // แถบหัวกลุ่มสถานะ/หัวคอลัมน์ในตาราง: ใช้สีเทาโปร่งทับสีกล่อง ให้ต่างจากแถวข้อมูลนิดหน่อย
+    // ไม่งั้นแถบยังเป็นสีอ่อนเดิม แล้วตัวหนังสือสีอ่อนที่ตั้งไว้จะมองไม่เห็น
+    rules.push(':root { --table-group-bg: rgba(128, 128, 128, 0.18); --table-head-bg: rgba(128, 128, 128, 0.1); --table-head-text: inherit; }');
+  }
+  if (theme.primaryButtonColor) {
+    rules.push(`.primary-btn { background: ${theme.primaryButtonColor} !important; color: ${readableTextOn(theme.primaryButtonColor)} !important; box-shadow: none !important; }`);
+  }
+  if (theme.secondaryButtonColor) {
+    rules.push(`.secondary-btn { background: ${theme.secondaryButtonColor} !important; color: ${readableTextOn(theme.secondaryButtonColor)} !important; }`);
   }
   return rules.join('\n');
 };

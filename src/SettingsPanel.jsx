@@ -53,8 +53,12 @@ export default function SettingsPanel({ theme, onChange, onClose }) {
         <ColorRow label="สีแถบเมนูซ้าย" field="sidebarColor" theme={theme} onChange={onChange} />
         <ColorRow label="สีตัวหนังสือแถบเมนูซ้าย" field="sidebarTextColor" theme={theme} onChange={onChange} />
 
+        <h3 style={{ margin: '18px 0 0', fontSize: '13px', color: '#087f75' }}>แถบด้านบน</h3>
+        <ColorRow label="สีแถบด้านบน" field="topbarColor" theme={theme} onChange={onChange} />
+
         <h3 style={{ margin: '18px 0 0', fontSize: '13px', color: '#087f75' }}>หน้าใช้งาน</h3>
         <ColorRow label="สีพื้นหลัง" field="pageColor" theme={theme} onChange={onChange} />
+        <ColorRow label="สีกล่องเนื้อหา (ตัวกรอง การ์ด ตาราง)" field="panelColor" theme={theme} onChange={onChange} />
         <div style={rowStyle}>
           <span style={labelStyle}>รูปพื้นหลัง</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -72,6 +76,10 @@ export default function SettingsPanel({ theme, onChange, onClose }) {
         </div>
         {imageError && <p style={{ color: '#c0392b', fontSize: '13px', margin: '6px 0 0' }}>{imageError}</p>}
         <ColorRow label="สีตัวหนังสือ" field="textColor" theme={theme} onChange={onChange} />
+
+        <h3 style={{ margin: '18px 0 0', fontSize: '13px', color: '#087f75' }}>ปุ่มกด</h3>
+        <ColorRow label="สีปุ่มหลัก (เพิ่มงานใหม่ บันทึก)" field="primaryButtonColor" theme={theme} onChange={onChange} />
+        <ColorRow label="สีปุ่มรอง (ตัวกรอง แก้ไข ดาวน์โหลด)" field="secondaryButtonColor" theme={theme} onChange={onChange} />
 
         <div className="modal-actions" style={{ justifyContent: 'space-between' }}>
           <button type="button" className="secondary-btn" onClick={() => onChange({ ...DEFAULT_THEME })}>คืนค่าเริ่มต้นทั้งหมด</button>
