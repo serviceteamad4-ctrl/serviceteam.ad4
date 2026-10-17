@@ -130,6 +130,7 @@ const createRequestFromFields = async (fields) => {
     .insert({
       customer: fields.customer || '',
       ticket,
+      ref: 'P1',
       source: 'ไลน์',
       location: fields.location || null,
       contact: fields.contact || null,
