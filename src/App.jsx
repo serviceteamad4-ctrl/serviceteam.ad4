@@ -8,7 +8,7 @@ import EditableDropdown from './EditableDropdown.jsx';
 import { getStoredDropdownData, addDropdownValue, removeDropdownValue } from './excelDataManager.js';
 import { dateFields as filterDateFields, filterFieldLabels } from './FilterPanel.jsx';
 import { isViewableImageUrl } from './requestUtils.js';
-import mascotLogo from './assets/mascot-dog.jpg';
+import { Mascot } from 'page-mascot';
 import LinePendingImages from './LinePendingImages.jsx';
 import LinePendingCloses from './LinePendingCloses.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
@@ -665,7 +665,7 @@ function App() {
     <div className="app-shell">
       <aside className={`sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
         <div className="brand">
-          <img className="brand-mark" src={mascotLogo} alt="Service Desk" />
+          <img className="brand-mark" src="/robot.jpeg" alt="Service Desk" />
           <div className="brand-text">
             <strong>Service Desk </strong>
             <small></small>
@@ -679,6 +679,14 @@ function App() {
           >
             ‹
           </button>
+        </div>
+        <div className="sidebar-mascot">
+          <Mascot
+            directions="/mascots/crt-directions.webp"
+            reactions="/mascots/crt-reactions.webp"
+            size={72}
+            label="โรบอท Service Desk"
+          />
         </div>
         <nav className="side-nav">
           <button className={`nav-item ${view === 'requests' ? 'active' : ''}`} onClick={() => setView('requests')} title="งานแจ้งบริการ">

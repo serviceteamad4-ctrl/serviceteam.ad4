@@ -35,6 +35,16 @@ body {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
 }
 
+.sidebar-mascot {
+  display: flex;
+  justify-content: center;
+  padding: 0 14px 32px;
+}
+
+.sidebar.collapsed .sidebar-mascot {
+  display: none;
+}
+
 .nav-item {
   border-radius: 13px;
   padding: 14px 15px;
