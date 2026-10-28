@@ -5,6 +5,7 @@ import { supabase } from './supabase.js';
 import { storeImage, removeImage, UPLOAD_DIR } from './storage.js';
 import { runMigrations } from './migrate.js';
 import { lineRouter } from './line.js';
+import { addEventsClient, broadcastRequestsChanged } from './events.js';
 
 const app = express();
 // Render (และ reverse proxy อื่นๆ) เชื่อม TLS เข้ามาแล้วส่งต่อเป็น http ภายใน
@@ -101,6 +102,20 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
+// SSE: บอกหน้าจอที่เปิดทิ้งไว้ว่าข้อมูลเปลี่ยน (เช่น มีคนแจ้งเปิด/ปิด/ย้ายงานผ่าน LINE) ให้ดึงข้อมูลใหม่เอง
+// EventSource ฝั่งเบราว์เซอร์เชื่อมต่อใหม่เองอัตโนมัติเมื่อขาดการเชื่อมต่อ
+app.get('/api/events', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write(': connected\n\n');
+  if (res.flushHeaders) res.flushHeaders();
+  addEventsClient(res);
+});
+
 app.get('/api/requests', async (_req, res) => {
   try {
     // Supabase คืนได้ครั้งละ 1000 แถว และเซิร์ฟเวอร์ (Render, สหรัฐฯ) กับฐานข้อมูล (เกาหลี) อยู่ไกลกัน
@@ -187,6 +202,7 @@ app.post('/api/requests', async (req, res) => {
 
     if (error) throw error;
 
+    broadcastRequestsChanged();
     res.status(201).json(data);
   } catch (error) {
     res.status(500).json({ message: 'Failed to create request', error: String(error) });
@@ -237,6 +253,7 @@ app.put('/api/requests/:id', async (req, res) => {
 
     if (error) throw error;
 
+    broadcastRequestsChanged();
     res.json(data);
   } catch (error) {
     res.status(500).json({ message: 'Failed to update request', error: String(error) });
@@ -267,6 +284,7 @@ app.delete('/api/requests/:id', async (req, res) => {
 
     if (error) throw error;
 
+    broadcastRequestsChanged();
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete request', error: String(error) });

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { supabase } from './supabase.js';
 import { storeImage, removeImage } from './storage.js';
+import { broadcastRequestsChanged } from './events.js';
 
 // ข้อความ LINE ต้องขึ้นต้นด้วยคำเหล่านี้ ถึงจะถือว่าเป็นคำสั่ง
 // (กันไม่ให้ข้อความคุยเล่นทั่วไปในกลุ่มถูกตีความเป็นงานโดยไม่ตั้งใจ)
@@ -24,6 +25,31 @@ const resolveStatus = (text) => {
 };
 
 // "แจ้งย้ายงาน / เลข MAR006189 (หรือแค่ 006189) / ไปเสนอราคา"
+// ย้ายไป "กำลังดำเนินการ" ใส่เพิ่มได้: "ผู้ดำเนินการ: ช่างบอย" / "เวลาเริ่ม: 09.30" / "เวลาสิ้นสุด: 17.00"
+// (วันที่เริ่ม/วันที่สิ้นสุด แยกบรรทัดก็ได้ หรือใส่รวมในค่าเวลา เช่น "เวลาเริ่ม: 28/10/2569 09.30")
+const MOVE_LABEL_TO_FIELD = {
+  'ผู้ดำเนินการ': 'assignee',
+  'ช่าง': 'assignee',
+  'เวลาเริ่ม': 'startTime',
+  'เวลาเริ่มต้น': 'startTime',
+  'เวลาเริ่มงาน': 'startTime',
+  'เวลาสิ้นสุด': 'endTime',
+  'เวลาสิ้นสุดงาน': 'endTime',
+  'เวลาเลิก': 'endTime',
+  'เวลาเลิกงาน': 'endTime',
+  'เวลาเสร็จ': 'endTime',
+  'เสร็จ': 'endTime',
+  'วันที่เริ่ม': 'startDate',
+  'วันที่เริ่มงาน': 'startDate',
+  'วันที่': 'startDate',
+  'วันที่สิ้นสุด': 'endDate',
+  'วันที่เสร็จ': 'endDate',
+  'วันที่เริ่ม, เวลา': 'startDateTime',
+  'วันที่เสร็จ, เวลา': 'endDateTime',
+  'วันที่สิ้นสุด, เวลา': 'endDateTime',
+};
+const MOVE_LABEL_KEYS = Object.keys(MOVE_LABEL_TO_FIELD).sort((a, b) => b.length - a.length);
+
 const parseMoveMessage = (lines) => {
   const fields = {};
   for (const line of lines.slice(1)) {
@@ -36,6 +62,19 @@ const parseMoveMessage = (lines) => {
     if (statusMatch) {
       fields.statusText = statusMatch[1].trim();
       fields.status = resolveStatus(fields.statusText);
+      continue;
+    }
+    // "ผู้ดำเนินการ: ช่างบอย" / "เวลาเริ่ม: 09.30" (มี : คั่น; greedy กัน label ที่มีลูกน้ำ เช่น "วันที่เริ่ม, เวลา")
+    const labeledMatch = line.match(/^([^:：]+)\s*[:：]\s*(.+)$/);
+    const label = labeledMatch ? MOVE_LABEL_TO_FIELD[labeledMatch[1].trim()] : null;
+    if (label) {
+      fields[label] = labeledMatch[2].trim();
+      continue;
+    }
+    // "เวลาเริ่ม 09.30" (ไม่มี : ก็รับ)
+    const inlineMatch = line.match(new RegExp(`^(${MOVE_LABEL_KEYS.join('|')})\\s+([^:：].*)$`));
+    if (inlineMatch) {
+      fields[MOVE_LABEL_TO_FIELD[inlineMatch[1]]] = inlineMatch[2].trim();
     }
   }
   return fields;
@@ -60,12 +99,22 @@ const LABEL_TO_FIELD = {
   'ชื่องาน': 'jobName',
   'ชื่อร้าน': 'jobName',
   'รายละเอียดงาน': 'detail',
+  'ลักษณะงาน': 'jobType',
   // เวลาจริงที่เปิด/ปิดงาน เผื่อส่งข้อความทีหลัง เช่น "เวลา: 16.22"
   'เวลา': 'time',
   'เวลาแจ้ง': 'time',
   'เวลาเปิดงาน': 'time',
   'เวลาปิดงาน': 'time',
   'เวลาเสร็จ': 'time',
+  // วันที่ (ใช้คู่กับเวลา ถ้าเขียนแยกบรรทัด) เช่น "วันที่เสร็จ: 28/10/2569" + "เวลา: 16.22"
+  'วันที่': 'date',
+  'วันที่แจ้ง': 'date',
+  'วันที่เสร็จ': 'date',
+  'วันที่ปิด': 'date',
+  'วันที่ปิดงาน': 'date',
+  // บางทีเขียนวันกับเวลารวมในบรรทัดเดียว: "วันที่เสร็จ, เวลา : 28/10/2569, 16.22"
+  'วันที่, เวลา': 'dateTime',
+  'วันที่เสร็จ, เวลา': 'dateTime',
 };
 
 // "16.22" / "16:22" / "16.22 น." / "17/10/2569 16.22" -> ISO string (เวลาไทย UTC+7) หรือ null ถ้าอ่านไม่ออก
@@ -98,6 +147,13 @@ export const parseThaiTime = (text, now = new Date()) => {
   let result = Date.UTC(year, month, day, hour, minute) - BANGKOK_OFFSET_MS;
   if (!dateMatch && result > now.getTime() + 5 * 60 * 1000) result -= 24 * 60 * 60 * 1000;
   return new Date(result).toISOString();
+};
+
+// รวม "วันที่เสร็จ: 28/10/2569" + "เวลา: 16.22" (หรือ "วันที่เสร็จ, เวลา : 28/10/2569, 16.22" บรรทัดเดียว)
+// เป็นวันเวลาเดียวแล้วแปลง ถ้าใส่แค่วันที่โดยไม่มีเวลาก็แปลงไม่ได้ คืน null
+const parseThaiDateTime = (fields) => {
+  const combined = [fields.date, fields.time].filter(Boolean).join(' ');
+  return parseThaiTime(combined) || parseThaiTime(fields.dateTime) || parseThaiTime(fields.time) || null;
 };
 
 const DONE_STATUSES = ['เรียบร้อยปกติ', 'ยกเลิก'];
@@ -150,6 +206,12 @@ export const parseLineMessage = (text) => {
     const timeMatch = line.match(/^(?:เวลา(?:แจ้ง|เปิดงาน|ปิดงาน|เสร็จ)?)\s+(\d.*)$/);
     if (timeMatch) {
       fields.time = timeMatch[1].trim();
+      continue;
+    }
+    // "วันที่เสร็จ 28/10/2569" (ไม่มี :) ก็รับ
+    const dateMatch = line.match(/^(?:วันที่(?:เสร็จ|ปิดงาน|ปิด|แจ้ง)?)\s+(\d.*)$/);
+    if (dateMatch) {
+      fields.date = dateMatch[1].trim();
       continue;
     }
     const match = line.match(/^([^:：]+)[:：]\s*(.*)$/);
@@ -227,12 +289,15 @@ const createRequestFromFields = async (fields) => {
       assignee: fields.assignee || null,
       action: fields.action || null,
       status: 'รับเรื่อง',
+      // งานที่แจ้งเปิดผ่าน LINE เป็น "แนะนำ" เสมอ จะแก้ลักษณะงานตอนย้ายงาน/ปิดงานทีหลัง
+      jobType: 'แนะนำ',
       ma: 'N',
-      receivedAt: parseThaiTime(fields.time) || new Date().toISOString(),
+      receivedAt: parseThaiDateTime(fields) || new Date().toISOString(),
     })
     .select()
     .single();
   if (error) throw error;
+  broadcastRequestsChanged();
   return data;
 };
 
@@ -255,8 +320,10 @@ export const applyClose = async (requestId, fields, completedAt) => {
   const updates = { status: 'เรียบร้อยปกติ', completedAt };
   if (fields.assignee) updates.assignee = fields.assignee;
   if (fields.action) updates.action = fields.action;
+  if (fields.jobType) updates.jobType = fields.jobType;
   const { error } = await supabase.from('requests').update(updates).eq('id', requestId);
   if (error) throw error;
+  broadcastRequestsChanged();
 };
 
 // คืนค่า { request } = ปิดแล้ว, { pendingCloseId } = เจอหลายงาน พักให้เลือกในเว็บ, null = ปิดไม่ได้
@@ -302,6 +369,7 @@ const queuePendingClose = async (candidates, fields, completedAt, groupKey, extr
         jobName: fields.jobName || null,
         assignee: fields.assignee || null,
         action: fields.action || null,
+        jobType: fields.jobType || null,
         ...extra,
       },
       completed_at: completedAt,
@@ -315,7 +383,7 @@ const queuePendingClose = async (candidates, fields, completedAt, groupKey, extr
 };
 
 const closeRequestFromFields = async (fields, groupKey, rawText) => {
-  const completedAt = parseThaiTime(fields.time) || new Date().toISOString();
+  const completedAt = parseThaiDateTime(fields) || new Date().toISOString();
   // ไม่มีหัวข้อ "การดำเนินการ" ก็ใช้รายละเอียดงาน + บรรทัดอิสระที่เหลือ (สิ่งที่ทำ/อาการ) แทน
   if (!fields.action) {
     const combined = [fields.detail, ...(fields.extra || [])].filter(Boolean).join('\n');
@@ -360,6 +428,7 @@ export const attachImagesToRequest = async (request, field, images, sourceGroupI
       .insert({ request_id: request.id, ticket: request.ticket, field, images, source_group_id: sourceGroupId });
     if (error) throw error;
   }
+  broadcastRequestsChanged();
 };
 
 // รับได้ทั้งเลขเต็ม (MAR006189) และเลขท้าย 6 หลักอย่างเดียว (006189) ไม่สนตัวพิมพ์ใหญ่เล็ก
@@ -395,11 +464,22 @@ const moveRequestFromFields = async (fields) => {
 
   const updates = { status: fields.status };
   if (ON_SITE_STATUSES.includes(fields.status)) updates.jobType = 'แก้ไขหน้างาน';
+  // ย้ายไป "กำลังดำเนินการ": ช่างลงหน้างานแล้ว เก็บผู้ดำเนินการ + เวลาเริ่ม/สิ้นสุดที่แจ้งมาด้วย (ถ้ามี)
+  if (fields.status === 'กำลังดำเนินการ') {
+    if (fields.assignee) updates.assignee = fields.assignee;
+    const startAt = parseThaiTime([fields.startDate, fields.startTime].filter(Boolean).join(' '))
+      || parseThaiTime(fields.startDateTime) || parseThaiTime(fields.startTime);
+    if (startAt) updates.appointment = startAt;
+    const endAt = parseThaiTime([fields.endDate, fields.endTime].filter(Boolean).join(' '))
+      || parseThaiTime(fields.endDateTime) || parseThaiTime(fields.endTime);
+    if (endAt) updates.appointmentEnd = endAt;
+  }
   // ย้ายไปเรียบร้อยปกติ: ใส่วันเวลาเสร็จให้ด้วย (ถ้ายังไม่มี) ไม่งั้นรายงานประจำวันนับไม่เจอ
   if (fields.status === 'เรียบร้อยปกติ' && !request.completedAt) updates.completedAt = new Date().toISOString();
 
   const { error } = await supabase.from('requests').update(updates).eq('id', request.id);
   if (error) throw error;
+  broadcastRequestsChanged();
   recordHit({ moved: request.ticket, from: request.status, to: fields.status });
   return request;
 };
@@ -470,6 +550,7 @@ const handleImageMessage = async (groupKey, messageId, accessToken, requestOrigi
   if (active.pendingCloseId) {
     const { error } = await supabase.from('line_pending_closes').update({ images: active.images }).eq('id', active.pendingCloseId);
     if (error) throw error;
+    broadcastRequestsChanged();
     recordHit({ heldImageForPendingClose: active.pendingCloseId, imageCount: active.images.length });
     return;
   }
@@ -491,6 +572,7 @@ const handleImageMessage = async (groupKey, messageId, accessToken, requestOrigi
     const { error } = await supabase.from('line_pending_images').update({ images: active.images }).eq('id', active.pendingId);
     if (error) throw error;
   }
+  broadcastRequestsChanged();
   recordHit({ attachedImage: active.ticket, imageCount: active.images.length });
 };
 
@@ -601,6 +683,7 @@ lineRouter.post('/pending-images/:id/choose', async (req, res) => {
     const { error: deleteError } = await supabase.from('line_pending_images').delete().eq('id', pending.id);
     if (deleteError) throw deleteError;
 
+    broadcastRequestsChanged();
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ message: 'Failed to choose image', error: String(error) });

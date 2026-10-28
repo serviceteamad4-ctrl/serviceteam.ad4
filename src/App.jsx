@@ -317,6 +317,8 @@ function App() {
   // ลากเลือกสีจะยิงเปลี่ยนค่าหลายสิบครั้งต่อวินาที เปลี่ยนสีบนจอทันที แต่บันทึกลงเบราว์เซอร์
   // ตอนหยุดลากแล้ว (ถ้ามีรูปพื้นหลัง การเขียนทุกครั้งหนักหลายร้อย KB)
   const themeSaveTimer = useRef(null);
+  // ยุบ SSE events ที่มาเป็นชุด (ข้อความแจ้งงาน + รูปตามมาอีกหลายใบ) ให้ดึงข้อมูลรอบเดียวตอนจบชุด
+  const requestsRefreshTimer = useRef(null);
   // คืน false ถ้าเก็บลงเบราว์เซอร์ไม่ได้ (เช่นรูปพื้นหลังใหญ่เกิน) จะไม่เปลี่ยนธีม
   const updateTheme = (changes) => {
     const next = { ...theme, ...changes };
@@ -340,6 +342,11 @@ function App() {
   const [advancedFilters, setAdvancedFilters] = useState({});
   const [editing, setEditing] = useState(null);
   const [selectedRequest, setSelectedRequest] = useState(null);
+  // เก็บสำเนาล่าสุดของงานที่เปิดดูไว้ ให้ฟังก์ชัน SSE (ผูกตอน mount ครั้งเดียว) อ่านค่าใหม่ได้เสมอ
+  const selectedRequestRef = useRef(null);
+  useEffect(() => {
+    selectedRequestRef.current = selectedRequest;
+  }, [selectedRequest]);
   // จำตำแหน่งเลื่อนหน้าจอ + งานที่พึ่งเปิดดู ไว้ตอนกดแก้ไข/ดูรายละเอียด
   // เพื่อให้กด "ย้อนกลับ" แล้วกลับมาที่เดิมโดยไม่ต้องเลื่อนหาใหม่
   const listScrollRef = useRef(0);
@@ -418,6 +425,43 @@ function App() {
     refreshLineQueues();
     const interval = setInterval(refreshLineQueues, 20000);
     return () => clearInterval(interval);
+  }, []);
+
+  // เปิด/ปิด/ย้ายงานผ่าน LINE เกิดที่ฝั่งเซิร์ฟเวอร์ หน้าจอที่เปิดทิ้งไว้จะอัปเดตเองทันที
+  // เซิร์ฟเวอร์ยิง SSE event "requests-changed" ทุกครั้งที่ข้อมูลเปลี่ยน ไม่ต้องกดรีเฟรชเอง
+  useEffect(() => {
+    if (!API_BASE_URL) return undefined;
+    const source = new EventSource(`${API_BASE_URL}/api/events`);
+
+    const refreshFromServer = () => {
+      clearTimeout(requestsRefreshTimer.current);
+      requestsRefreshTimer.current = setTimeout(async () => {
+        const nextRequests = await readRequests();
+        setRequests(nextRequests);
+        const opened = selectedRequestRef.current;
+        if (opened) {
+          const fresh = nextRequests.find((item) => item.id === opened.id);
+          if (fresh) setSelectedRequest(fresh);
+        }
+        refreshLineQueues();
+      }, 400);
+    };
+
+    source.addEventListener('requests-changed', refreshFromServer);
+    // EventSource เชื่อมต่อใหม่เองเมื่อขาดการเชื่อมต่อ (เช่นเซิร์ฟเวอร์รีสตาร์ท)
+    // ตอนเชื่อมใหม่ให้ดึงข้อมูลชดเชยของที่เปลี่ยนไประหว่างขาดการเชื่อมต่อ
+    let isFirstOpen = true;
+    source.onopen = () => {
+      if (isFirstOpen) {
+        isFirstOpen = false;
+        return;
+      }
+      refreshFromServer();
+    };
+    return () => {
+      clearTimeout(requestsRefreshTimer.current);
+      source.close();
+    };
   }, []);
 
   const handleChooseLineClose = async (pendingId, requestId) => {

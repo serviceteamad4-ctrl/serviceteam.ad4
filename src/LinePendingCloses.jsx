@@ -66,6 +66,7 @@ export default function LinePendingCloses({ items, onChoose, onChooseTicket, onD
                 </strong>
                 <p style={{ margin: '0 0 10px', color: '#718087', fontSize: '13px' }}>
                   ผู้ดำเนินการ: {item.fields?.assignee || '-'}
+                  {item.fields?.jobType && ` · ลักษณะงาน: ${item.fields.jobType}`}
                   {item.images?.length > 0 && ` · รูปงานเสร็จ ${item.images.length} รูป`}
                 </p>
 
