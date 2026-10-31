@@ -709,7 +709,7 @@ function App() {
     <div className="app-shell">
       <aside className={`sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
         <div className="brand">
-          <img className="brand-mark" src="/robot.jpeg" alt="Service Desk" />
+          <img className="brand-mark" src="/robot.webp" alt="Service Desk" />
           <div className="brand-text">
             <strong>Service Desk </strong>
             <small></small>
@@ -1343,8 +1343,36 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
 function FileField({ name, label, value, onChange }) {
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleFile = async (event) => {
-    const file = event.target.files?.[0];
+  const handleFile = (event) => uploadFile(event.target.files?.[0]);
+
+  // วางรูปที่ก๊อปมา (Ctrl+V) เช่นรูปจาก LINE หรือภาพแคปหน้าจอ ไม่ต้องบันทึกเป็นไฟล์ก่อน
+  const handlePaste = (event) => {
+    const item = Array.from(event.clipboardData?.items || []).find((entry) => entry.type.startsWith('image/'));
+    if (!item) return;
+    event.preventDefault();
+    uploadFile(item.getAsFile());
+  };
+
+  const pasteFromClipboard = async (event) => {
+    event.preventDefault();
+    if (isUploading) return;
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find((entry) => entry.startsWith('image/'));
+        if (type) {
+          const blob = await item.getType(type);
+          uploadFile(new File([blob], `pasted.${type.split('/')[1] || 'png'}`, { type }));
+          return;
+        }
+      }
+      await Swal.fire({ icon: 'info', title: 'ไม่มีรูปในคลิปบอร์ด', text: 'ก๊อปรูปก่อน (คลิกขวาที่รูป > คัดลอก) แล้วค่อยกดวาง', confirmButtonText: 'ตกลง', confirmButtonColor: '#5b5ce2' });
+    } catch {
+      await Swal.fire({ icon: 'info', title: 'เบราว์เซอร์ไม่อนุญาตให้อ่านคลิปบอร์ด', text: 'คลิกที่กรอบ "วางรูปตรงนี้" แล้วกด Ctrl+V แทน', confirmButtonText: 'ตกลง', confirmButtonColor: '#5b5ce2' });
+    }
+  };
+
+  const uploadFile = async (file) => {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
@@ -1441,6 +1469,15 @@ function FileField({ name, label, value, onChange }) {
         disabled={isUploading}
       />
       <span>{isUploading ? '⟳' : '▣'}</span>
+      <div
+        className="paste-zone"
+        tabIndex={0}
+        onPaste={handlePaste}
+        onClick={(event) => { event.preventDefault(); event.currentTarget.focus(); }}
+      >
+        <span>{isUploading ? 'กำลังอัพโหลด...' : '📋 วางรูปตรงนี้: คลิกกรอบนี้แล้วกด Ctrl+V'}</span>
+        <button type="button" className="secondary-btn" onClick={pasteFromClipboard} disabled={isUploading}>วางรูป</button>
+      </div>
       {value && (isViewableImageUrl(value) ? (
         <img className="image-preview" src={value} alt="ตัวอย่างรูปภาพ" />
       ) : (
