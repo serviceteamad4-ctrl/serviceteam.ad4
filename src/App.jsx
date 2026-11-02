@@ -581,7 +581,9 @@ function App() {
     [filtered, page, pageSize],
   );
 
-  const persist = async (requestItem) => {
+  // untouchedKeys: ฟิลด์ที่ผู้ใช้ไม่ได้แก้ในฟอร์ม จะไม่ส่งไปทับ (เช่นรูปที่ LINE เพิ่งแนบเข้างานระหว่างเปิดฟอร์มค้างไว้
+  // ถ้าส่งค่าเก่าที่ว่างกลับไป รูปใหม่จะหาย)
+  const persist = async (requestItem, untouchedKeys = []) => {
     const normalized = normalizeRequest(requestItem);
     const isUpdate = Boolean(normalized.id);
     const endpoint = isUpdate ? `${API_BASE_URL}/api/requests/${normalized.id}` : `${API_BASE_URL}/api/requests`;
@@ -591,7 +593,7 @@ function App() {
       const response = await fetch(endpoint, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(normalized),
+        body: JSON.stringify(Object.fromEntries(Object.entries(normalized).filter(([key]) => !untouchedKeys.includes(key)))),
       });
 
       if (!response.ok) {
@@ -611,7 +613,7 @@ function App() {
     }
   };
 
-  const saveRequest = async (request) => {
+  const saveRequest = async (request, untouchedKeys = []) => {
     const normalized = normalizeRequest({ ...request });
     const isExisting = Boolean(normalized.id);
 
@@ -623,7 +625,7 @@ function App() {
     normalized.ticket = nextTicket;
 
     try {
-      const saved = await persist(normalized);
+      const saved = await persist(normalized, untouchedKeys);
       setRequests(saved);
       setEditing(null);
       await Swal.fire({
@@ -1205,7 +1207,11 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
           if (isSaving) return;
           setIsSaving(true);
           try {
-            await onSave(form);
+            // รูปที่ไม่ได้แก้ในฟอร์มนี้ไม่ต้องส่งกลับไป (กันทับรูปที่เข้ามาทางอื่นระหว่างเปิดฟอร์มค้างไว้)
+            const untouchedImages = request.id
+              ? ['image', 'completedImage'].filter((key) => (form[key] || '') === (request[key] || ''))
+              : [];
+            await onSave(form, untouchedImages);
           } finally {
             setIsSaving(false);
           }
