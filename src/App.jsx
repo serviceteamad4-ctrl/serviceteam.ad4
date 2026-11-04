@@ -41,7 +41,7 @@ function IconReports() {
 
 // ลำดับสถานะที่ต้องแสดง "รับเรื่อง" มาก่อนเสมอ ใช้ทั้งจัดเรียงก่อนแบ่งหน้าและจัดกลุ่มในตาราง
 // เพื่อไม่ให้การแบ่งหน้าตัดกลุ่มสถานะเดียวกันขาดออกจากกันแบบสุ่มตามวันที่
-const STATUS_ORDER = ['รับเรื่อง', 'รอดำเนินการ', 'รอจัดคิวช่าง', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด', 'รออะไหล่', 'รอเสนอราคา', 'เรียบร้อยปกติ', 'ยกเลิก'];
+const STATUS_ORDER = ['รับเรื่อง', 'รอดำเนินการ', 'รอจัดคิวช่าง', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด', 'รออะไหล่', 'เสนอราคา', 'เรียบร้อยปกติ', 'ยกเลิก'];
 const statusRank = (status) => {
   const index = STATUS_ORDER.indexOf(status);
   return index === -1 ? STATUS_ORDER.length : index;
@@ -108,8 +108,8 @@ const monthKeyFromValue = (value) => (value ? bangkokDateFormatter.format(new Da
 // ทำให้ตัวกรองช่วงวันที่พลาดงานที่รับแจ้ง/เสร็จช่วงเที่ยงคืน-ตี 6 ของไทย (ซึ่ง UTC ยังเป็นวันก่อนหน้า)
 const toBangkokDateKey = (value) => (value ? bangkokDateFormatter.format(new Date(value)) : '');
 
-// "เสนอราคา" กับ "รอเสนอราคา" คือสถานะเดียวกัน รวมให้เหลือชื่อเดียวเพื่อไม่ให้งานกระจายเป็นสองกลุ่ม
-const STATUS_ALIASES = { 'เสนอราคา': 'รอเสนอราคา' };
+// "รอเสนอราคา" (ชื่อเก่า) เปลี่ยนเป็น "เสนอราคา" รวมให้เหลือชื่อเดียวเพื่อไม่ให้งานกระจายเป็นสองกลุ่ม
+const STATUS_ALIASES = { 'รอเสนอราคา': 'เสนอราคา' };
 
 const normalizeRequest = (item = {}) => {
   const nextItem = { ...emptyRequest, ...item };
@@ -985,7 +985,7 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
           <option>รอลูกค้าสรุปงาน</option>
           <option>รออะไหล่</option>
           <option>เรียบร้อยปกติ</option>
-          <option>รอเสนอราคา</option>
+          <option>เสนอราคา</option>
         </select>
         <button className="secondary-btn ui-button" onClick={() => setFilterOpen(true)} style={{ borderRadius: '12px', height: '42px', padding: '0 14px', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>☷ ตัวกรอง</button>
         <button className="secondary-btn" onClick={onExport} style={{ borderRadius: '12px', height: '42px', padding: '0 14px', boxShadow: '0 4px 12px rgba(24, 36, 43, 0.03)' }}>ดาวน์โหลด CSV</button>

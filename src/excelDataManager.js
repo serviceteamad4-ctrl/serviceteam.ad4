@@ -65,7 +65,7 @@ const DEFAULT_DROPDOWN_DATA = {
   assignee: [],
   source: ['ไลน์', 'โทรศัพท์', 'อีเมล', 'เว็บไซต์'],
   jobType: ['แนะนำ', 'แก้ไขหน้างาน', 'รีโมท', 'ประเมินราคา', 'เทรน'],
-  status: ['รับเรื่อง', 'รอดำเนินการ', 'รอจัดคิวช่าง', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด', 'รออะไหล่', 'รอเสนอราคา', 'เรียบร้อยปกติ', 'ยกเลิก'],
+  status: ['รับเรื่อง', 'รอดำเนินการ', 'รอจัดคิวช่าง', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด', 'รออะไหล่', 'เสนอราคา', 'เรียบร้อยปกติ', 'ยกเลิก'],
   equipment: ['จอ LED', 'Kiosk', 'กล่องเล่นสื่อ', 'อื่นๆ'],
   // ค่าที่ผู้ใช้ลบทิ้งจากดรอปดาวน์ (รวมถึงค่าที่ดึงมาจากประวัติงานจริง) จะถูกจำไว้ที่นี่
   // เพื่อไม่ให้กลับมาโผล่อีกแม้จะยังมีอยู่ในข้อมูลเก่า
@@ -84,7 +84,9 @@ export const getStoredDropdownData = () => {
 
     Object.keys(DEFAULT_DROPDOWN_DATA).forEach((field) => {
       if (field === 'hidden') return;
-      const combined = Array.from(new Set([...(DEFAULT_DROPDOWN_DATA[field] || []), ...(parsed[field] || [])]));
+      const combined = Array.from(new Set([...(DEFAULT_DROPDOWN_DATA[field] || []), ...(parsed[field] || [])]))
+        // ชื่อเก่า "รอเสนอราคา" ที่อาจค้างอยู่ใน localStorage ของเครื่อง เปลี่ยนเป็นชื่อใหม่แล้ว
+        .filter((value) => !(field === 'status' && value === 'รอเสนอราคา'));
       merged[field] = combined.filter((value) => !(hidden[field] || []).includes(value));
     });
 
