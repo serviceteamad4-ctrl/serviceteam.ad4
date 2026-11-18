@@ -2,6 +2,7 @@
 import Swal from 'sweetalert2';
 import { jsPDF } from 'jspdf';
 import Dashboard from './Dashboard.jsx';
+import SupplierTracking from './SupplierTracking.jsx';
 import RequestDetail from './RequestDetail.jsx';
 import FilterPanel from './FilterPanel.jsx';
 import EditableDropdown from './EditableDropdown.jsx';
@@ -74,12 +75,6 @@ const emptyRequest = {
   jobType: 'แนะนำ',
   status: 'รับเรื่อง',
   assignee: '',
-  supplier: '',
-  supplierNotifiedAt: '',
-  supplierIssue: '',
-  supplierStatus: '',
-  supplierFollowUpAt: '',
-  supplierNote: '',
   appointment: '',
   appointmentEnd: '',
   action: '',
@@ -630,24 +625,6 @@ function App() {
     }
   };
 
-  // อัปเดตบางช่องของงาน (เช่น สถานะซัพ) โดยไม่เปิดฟอร์ม ส่งไปเฉพาะช่องที่เปลี่ยน
-  const quickUpdateRequest = async (request, patch) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/requests/${request.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
-      });
-      if (!response.ok) throw new Error((await response.json().catch(() => null))?.message || 'API save failed');
-      const saved = normalizeRequest(await response.json());
-      setRequests((current) => current.map((item) => (item.id === saved.id ? saved : item)));
-      setToast(`อัปเดต ${saved.ticket || ''}: ${patch.supplierStatus}`);
-      setTimeout(() => setToast(''), 3000);
-    } catch (error) {
-      Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: error instanceof Error ? error.message : '', confirmButtonText: 'ปิด' });
-    }
-  };
-
   const saveRequest = async (request, untouchedKeys = []) => {
     const normalized = normalizeRequest({ ...request });
     const isExisting = Boolean(normalized.id);
@@ -911,11 +888,7 @@ function App() {
             </div>
           )
         ) : view === 'suppliers' ? (
-          <SupplierTracking
-            requests={requests}
-            onOpen={(request) => { setView('requests'); setSelectedRequest(request); }}
-            onQuickUpdate={quickUpdateRequest}
-          />
+          <SupplierTracking />
         ) : (
           <Dashboard requests={requests} />
         )}
@@ -1149,109 +1122,6 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
   );
 }
 
-const SUPPLIER_STATUSES = ['แจ้งแล้ว', 'ติดตามแล้ว', 'แก้แล้ว'];
-const SUPPLIER_STATUS_COLOR = { 'แจ้งแล้ว': '#d97706', 'ติดตามแล้ว': '#2563eb', 'แก้แล้ว': '#16a34a' };
-
-// หน้าติดตามงานซัพ: งานที่ระบุซัพพลายเออร์ จัดกลุ่มตามซัพ เรียงที่แจ้งไว้นานสุดก่อน
-// ซัพแก้แล้ว หรืองานปิดแล้ว ถือว่าไม่ค้าง
-function SupplierTracking({ requests, onOpen, onQuickUpdate }) {
-  const [showDone, setShowDone] = useState(false);
-  const [supplierFilter, setSupplierFilter] = useState('ทั้งหมด');
-  const [busyId, setBusyId] = useState(null);
-  const closed = (r) => r.supplierStatus === 'แก้แล้ว' || ['เรียบร้อยปกติ', 'ยกเลิก'].includes(r.status);
-  const since = (r) => r.supplierNotifiedAt || r.receivedAt || r.createdAt;
-  const withSupplier = useMemo(() => requests.filter((r) => String(r.supplier || '').trim()), [requests]);
-  const suppliers = useMemo(() => uniqueSorted(withSupplier.map((r) => r.supplier)), [withSupplier]);
-  const groups = useMemo(() => {
-    const items = withSupplier
-      .filter((r) => showDone || !closed(r))
-      .filter((r) => supplierFilter === 'ทั้งหมด' || r.supplier.trim() === supplierFilter);
-    return suppliers
-      .map((name) => ({
-        name,
-        items: items
-          .filter((r) => r.supplier.trim() === name)
-          .sort((a, b) => new Date(since(a) || 0) - new Date(since(b) || 0)),
-      }))
-      .filter((g) => g.items.length);
-  }, [withSupplier, suppliers, showDone, supplierFilter]);
-  const openItems = withSupplier.filter((r) => !closed(r));
-  const notFollowed = openItems.filter((r) => r.supplierStatus !== 'ติดตามแล้ว').length;
-  const daysSince = (value) => (value ? Math.max(0, Math.floor((Date.now() - new Date(value)) / 86400000)) : null);
-  const shortDate = (value) => (value ? new Intl.DateTimeFormat('th-TH-u-ca-gregory', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }).format(new Date(value)) : '-');
-  const quick = async (r, supplierStatus) => {
-    setBusyId(r.id);
-    try {
-      await onQuickUpdate(r, { supplierStatus, supplierFollowUpAt: new Date().toISOString() });
-    } finally {
-      setBusyId(null);
-    }
-  };
-  const cell = { padding: '10px', borderBottom: '1px solid var(--line-color, #eef1ef)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' };
-  const btn = { padding: '3px 8px', borderRadius: '8px', border: '1px solid var(--line-color, #ccc)', background: 'transparent', color: 'inherit', fontSize: '12px', cursor: 'pointer', marginRight: '4px' };
-  const headers = ['เลขติดตาม', 'ลูกค้า / สาขา', 'แจ้งซัพเมื่อ', 'แจ้งเรื่องอะไร', 'สถานะ', 'ติดตามล่าสุด / ผล', 'ค้าง (วัน)', 'อัปเดต'];
-
-  return (
-    <section style={{ padding: '8px 4px' }}>
-      <h2 style={{ margin: '0 0 16px', color: 'var(--ink)' }}>ติดตามงานซัพ</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-        <Metric label="งานซัพที่ยังไม่แก้" value={openItems.length} className="accent" />
-        <Metric label="ยังไม่ได้ติดตาม" value={notFollowed} />
-        <Metric label="จำนวนซัพ" value={suppliers.length} />
-        <Metric label="งานซัพทั้งหมด" value={withSupplier.length} />
-      </div>
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
-        <select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)} style={{ height: '40px', borderRadius: '12px', padding: '0 12px', minWidth: '200px' }}>
-          <option>ทั้งหมด</option>
-          {suppliers.map((s) => <option key={s}>{s}</option>)}
-        </select>
-        <label style={{ display: 'flex', gap: '6px', alignItems: 'center', color: 'var(--ink)' }}>
-          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> แสดงงานที่แก้แล้ว/ปิดแล้ว
-        </label>
-      </div>
-      {groups.length === 0 ? (
-        <p style={{ color: 'var(--ink)' }}>ยังไม่มีงานที่ระบุซัพพลายเออร์ — เลือกซัพได้ที่ช่อง "ซัพพลายเออร์" ในฟอร์มงาน</p>
-      ) : groups.map((group) => (
-        <div key={group.name} style={{ marginBottom: '18px', border: '1px solid var(--line-color, #e4e9e8)', borderRadius: '14px', overflowX: 'auto' }}>
-          <div style={{ padding: '10px 14px', fontWeight: 700, background: 'var(--table-group-bg, #f4f9f9)', color: 'var(--ink)' }}>
-            {group.name} <span style={{ fontWeight: 400 }}>({group.items.length} งาน)</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.2fr 0.9fr 1.8fr 0.8fr 1.6fr 0.6fr 1.3fr', minWidth: '1000px', fontSize: '13px', color: 'var(--ink)' }}>
-            {headers.map((h) => (
-              <div key={h} style={{ ...cell, cursor: 'default', fontWeight: 700, background: 'var(--table-head-bg, #f7f8fc)' }}>{h}</div>
-            ))}
-            {group.items.map((r) => {
-              const days = closed(r) ? null : daysSince(since(r));
-              const sStatus = r.supplierStatus || 'แจ้งแล้ว';
-              const followLine = [r.supplierFollowUpAt && shortDate(r.supplierFollowUpAt), r.supplierNote].filter(Boolean).join(' · ') || '-';
-              const place = [r.customer, r.location].filter(Boolean).join(' · ') || '-';
-              return (
-                <React.Fragment key={r.id}>
-                  <div style={cell} onClick={() => onOpen(r)}>{r.ticket || '-'}</div>
-                  <div style={cell} onClick={() => onOpen(r)} title={place}>{place}</div>
-                  <div style={cell} onClick={() => onOpen(r)}>{shortDate(r.supplierNotifiedAt)}</div>
-                  <div style={cell} onClick={() => onOpen(r)} title={r.supplierIssue || r.description}>{r.supplierIssue || r.description || '-'}</div>
-                  <div style={{ ...cell, fontWeight: 700, color: SUPPLIER_STATUS_COLOR[sStatus] }} onClick={() => onOpen(r)}>{sStatus}</div>
-                  <div style={cell} onClick={() => onOpen(r)} title={followLine}>{followLine}</div>
-                  <div style={{ ...cell, fontWeight: 700, color: days !== null && days >= 7 ? '#dc2626' : 'inherit' }} onClick={() => onOpen(r)}>{days ?? '-'}</div>
-                  <div style={{ ...cell, cursor: 'default' }}>
-                    {sStatus !== 'แก้แล้ว' && (
-                      <>
-                        <button type="button" style={btn} disabled={busyId === r.id} onClick={() => quick(r, 'ติดตามแล้ว')}>ติดตามแล้ว</button>
-                        <button type="button" style={{ ...btn, color: '#16a34a', borderColor: '#16a34a' }} disabled={busyId === r.id} onClick={() => quick(r, 'แก้แล้ว')}>แก้แล้ว</button>
-                      </>
-                    )}
-                  </div>
-                </React.Fragment>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </section>
-  );
-}
-
 function Metric({ label, value, className = '', style = {} }) {
   return (
     <div className="metric" style={{ background: '#fff', border: '1px solid #edf0ef', borderRadius: '18px', boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', padding: '16px', ...style }}>
@@ -1271,7 +1141,6 @@ const deriveOptionsFromRequests = (requests) => ({
   // ผู้ดำเนินการเก่าบางงานพิมพ์รวมกันเป็นสตริงเดียวคั่นด้วย "," (เช่น "PLAY, อีฟ")
   // แยกออกเป็นชื่อเดี่ยวๆ ก่อน ไม่ให้ตัวเลือกในดรอปดาวน์เหลือเป็นก้อนรวมชื่อ
   assignee: uniqueSorted(requests.flatMap((r) => String(r.assignee || '').split(','))),
-  supplier: uniqueSorted(requests.map((r) => r.supplier)),
 });
 
 const mergeOptions = (...lists) => uniqueSorted(lists.flat());
@@ -1287,8 +1156,6 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
     appointment: request.appointment ? toDateTimeLocalValue(request.appointment) : '',
     appointmentEnd: request.appointmentEnd ? toDateTimeLocalValue(request.appointmentEnd) : '',
     completedAt: request.completedAt ? toDateTimeLocalValue(request.completedAt) : '',
-    supplierNotifiedAt: request.supplierNotifiedAt ? toDateTimeLocalValue(request.supplierNotifiedAt) : '',
-    supplierFollowUpAt: request.supplierFollowUpAt ? toDateTimeLocalValue(request.supplierFollowUpAt) : '',
     ticket: request.ticket || '',
   }));
   const [dropdownData, setDropdownData] = useState(getStoredDropdownData());
@@ -1462,33 +1329,6 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
               onRemoveOption={(value) => handleRemoveDropdownValue('assignee', value)}
               multiple
             />
-            <EditableDropdown
-              name="supplier"
-              label="ซัพพลายเออร์"
-              value={form.supplier || ''}
-              options={excludeHidden(mergeOptions(dropdownData.supplier || [], historyOptions.supplier), dropdownData.hidden?.supplier)}
-              onChange={update}
-              onAddOption={(value) => {
-                handleAddDropdownValue('supplier', value);
-                update({ target: { name: 'supplier', value } });
-              }}
-              onRemoveOption={(value) => handleRemoveDropdownValue('supplier', value)}
-            />
-            {form.supplier && (
-              <>
-                {text('supplierNotifiedAt', 'แจ้งซัพเมื่อ', false, 'datetime-local')}
-                <label className="editor-field">
-                  <span>สถานะกับซัพ</span>
-                  <select name="supplierStatus" value={form.supplierStatus || ''} onChange={update}>
-                    <option value="">-</option>
-                    {SUPPLIER_STATUSES.map((s) => <option key={s}>{s}</option>)}
-                  </select>
-                </label>
-                {textarea('supplierIssue', 'แจ้งซัพเรื่องอะไร')}
-                {text('supplierFollowUpAt', 'ติดตามล่าสุดเมื่อ', false, 'datetime-local')}
-                {textarea('supplierNote', 'ผลการติดตาม / ซัพตอบว่าอะไร')}
-              </>
-            )}
             {form.status === 'กำลังดำเนินการ' && (
               <>
                 {text('appointment', 'วันที่นัดหมาย เวลาเริ่มต้น', false, 'datetime-local')}

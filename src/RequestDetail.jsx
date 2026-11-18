@@ -19,7 +19,6 @@ const sections = [
       ['description', 'ข้อมูลการรับแจ้ง'], ['image', 'รูปภาพที่แจ้ง'],
       ['ma', 'MA'], ['jobType', 'ลักษณะงาน'], ['status', 'สถานะงาน'],
       ['assignee', 'ผู้ดำเนินการ'],
-      ['supplier', 'ซัพพลายเออร์'], ['supplierNotifiedAt', 'แจ้งซัพเมื่อ'], ['supplierIssue', 'แจ้งซัพเรื่อง'], ['supplierStatus', 'สถานะกับซัพ'], ['supplierFollowUpAt', 'ติดตามซัพล่าสุด'], ['supplierNote', 'ผลการติดตามซัพ'],
       ['appointment', 'วันนัดหมาย เวลาเริ่มต้น'], ['appointmentEnd', 'วันนัดหมาย เวลาสิ้นสุด'],
     ],
   },
@@ -36,7 +35,7 @@ const sections = [
 
 const IMAGE_KEYS = ['image', 'completedImage'];
 const WIDE_KEYS = ['description', 'action', 'result', 'notes', 'image', 'completedImage'];
-const DATE_KEYS = ['receivedAt', 'appointment', 'appointmentEnd', 'completedAt', 'supplierNotifiedAt', 'supplierFollowUpAt'];
+const DATE_KEYS = ['receivedAt', 'appointment', 'appointmentEnd', 'completedAt'];
 
 // รองรับทั้งรูปแบบเก่า (data:image base64) และรูปแบบใหม่ (URL จาก Supabase Storage / เก็บบนเซิร์ฟเวอร์)
 const isImageValue = (key, value) => IMAGE_KEYS.includes(key) && typeof value === 'string' && value.trim().length > 0;

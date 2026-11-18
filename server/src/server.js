@@ -330,6 +330,44 @@ app.post('/api/upload', async (req, res) => {
 
 // รัน migration (CREATE TABLE IF NOT EXISTS) ทุกครั้งที่ start ปลอดภัยเพราะ idempotent
 // ถ้าพังก็แค่ log ไว้ ไม่ปล่อยให้ทั้งเซิร์ฟเวอร์ start ไม่ขึ้นเพราะ migration เดียว
+
+// ---------- งานติดตามซัพ (ตาราง supplier_tasks แยกจากงานแจ้งบริการ) ----------
+const SUPPLIER_TASK_TEXT = ['supplier', 'topic', 'location', 'status', 'note'];
+const SUPPLIER_TASK_DATES = ['notified_at', 'follow_up_at'];
+const supplierTaskFields = (body) => {
+  const out = {};
+  SUPPLIER_TASK_TEXT.forEach((key) => { if (body[key] !== undefined) out[key] = body[key] || null; });
+  SUPPLIER_TASK_DATES.forEach((key) => { if (body[key] !== undefined) out[key] = body[key] ? bangkokInputToISOString(body[key]) : null; });
+  return out;
+};
+
+app.get('/api/supplier-tasks', async (_req, res) => {
+  const { data, error } = await supabase.from('supplier_tasks').select('*').order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ message: 'Failed to fetch supplier tasks', error: String(error.message || error) });
+  res.json(data);
+});
+
+app.post('/api/supplier-tasks', async (req, res) => {
+  const fields = supplierTaskFields(req.body || {});
+  if (!fields.supplier) return res.status(400).json({ message: 'ต้องระบุชื่อซัพ' });
+  const { data, error } = await supabase.from('supplier_tasks').insert({ status: 'แจ้งแล้ว', ...fields }).select().single();
+  if (error) return res.status(500).json({ message: 'Failed to create supplier task', error: String(error.message || error) });
+  res.status(201).json(data);
+});
+
+app.put('/api/supplier-tasks/:id', async (req, res) => {
+  const fields = { ...supplierTaskFields(req.body || {}), updated_at: new Date().toISOString() };
+  const { data, error } = await supabase.from('supplier_tasks').update(fields).eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ message: 'Failed to update supplier task', error: String(error.message || error) });
+  res.json(data);
+});
+
+app.delete('/api/supplier-tasks/:id', async (req, res) => {
+  const { error } = await supabase.from('supplier_tasks').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ message: 'Failed to delete supplier task', error: String(error.message || error) });
+  res.status(204).end();
+});
+
 runMigrations()
   .catch((error) => console.error('Migration failed on startup:', error))
   .finally(() => {
