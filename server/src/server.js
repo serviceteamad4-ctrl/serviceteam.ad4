@@ -15,7 +15,7 @@ const PORT = Number(process.env.PORT || 4001);
 
 const REQUEST_COLUMNS = [
   'id', 'customer', 'ref', 'source', 'receivedAt', 'ticket', 'location', 'site',
-  'contact', 'phone', 'description', 'image', 'ma', 'jobType', 'status', 'assignee', 'supplier',
+  'contact', 'phone', 'description', 'image', 'ma', 'jobType', 'status', 'assignee',
   'appointment', 'appointmentEnd', 'action', 'result', 'equipment', 'completedImage',
   'completedAt', 'map', 'vehicle', 'notes', 'file', 'createdAt', 'updatedAt',
 ];
@@ -185,7 +185,6 @@ app.post('/api/requests', async (req, res) => {
         jobType: body.jobType || null,
         status: body.status || null,
         assignee: body.assignee || null,
-        supplier: body.supplier || null,
         appointment: body.appointment ? bangkokInputToISOString(body.appointment) : null,
         appointmentEnd: body.appointmentEnd ? bangkokInputToISOString(body.appointmentEnd) : null,
         action: body.action || null,
@@ -238,7 +237,6 @@ app.put('/api/requests/:id', async (req, res) => {
     setIfDefined('action', body.action);
     setIfDefined('result', body.result);
     setIfDefined('equipment', body.equipment);
-    setIfDefined('supplier', body.supplier);
     setIfDefined('completedImage', body.completedImage);
     setIfDefined('completedAt', body.completedAt ? bangkokInputToISOString(body.completedAt) : undefined);
     setIfDefined('map', body.map);
