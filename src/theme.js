@@ -110,7 +110,7 @@ export const buildThemeCss = (theme) => {
     rules.push(`:root { --ink: ${theme.textColor}; --modern-text: ${theme.textColor}; }`);
     rules.push(`body, .main-content, .page-heading h1, .metric strong { color: ${theme.textColor}; }`);
     rules.push(`.dashboard-page h1, .dashboard-page .eyebrow, .dashboard-page .subheading { color: ${theme.textColor} !important; }`);
-    rules.push(`.page-heading h1, .daily-sheet, .daily-sheet .sheet-date, .daily-sheet .sheet-child, .daily-sheet .sheet-child-value, .daily-sheet .sheet-number { color: ${theme.textColor} !important; }`);
+    rules.push(`.page-heading h1, .daily-sheet, .daily-sheet .sheet-date, .daily-sheet .sheet-label, .daily-sheet .sheet-value, .daily-sheet .sheet-child, .daily-sheet .sheet-child-value, .daily-sheet .sheet-number { color: ${theme.textColor} !important; }`);
     // หัวคอลัมน์ตารางเดิมเป็นสีเทาตายตัว บนพื้นเข้มมองไม่เห็น ให้ตามสีตัวหนังสือไปด้วย
     rules.push(`:root { --table-head-text: ${theme.textColor}; }`);
   }
@@ -157,6 +157,12 @@ export const buildThemeCss = (theme) => {
     // ไม่งั้นแถบยังเป็นสีอ่อนเดิม แล้วตัวหนังสือสีอ่อนที่ตั้งไว้จะมองไม่เห็น
     rules.push(':root { --table-group-bg: rgba(128, 128, 128, 0.18); --table-head-bg: rgba(128, 128, 128, 0.1); }');
     // ตารางรายงานประจำวัน: แต่ละช่องตั้งพื้นขาว/สีอ่อนไว้ตายตัว ให้โปร่งเห็นสีกล่องแทน
+    // แถวสี (ประเภทงาน/สำเร็จวันนี้ ฯลฯ) เปลี่ยนเป็นแถบสีโปร่ง และตัวหนังสือตามสีธีม ให้อ่านออกบนพื้นเข้ม
+    const tones = { purple: '155, 95, 220', blue: '70, 130, 210', yellow: '220, 180, 40', green: '60, 170, 90', gray: '140, 150, 150', amber: '230, 140, 40' };
+    Object.entries(tones).forEach(([tone, rgb]) => {
+      rules.push(`.daily-sheet .sheet-label.${tone}, .daily-sheet .sheet-value.${tone} { background-color: rgba(${rgb}, 0.22) !important; }`);
+    });
+    rules.push('.daily-sheet { background: transparent !important; }');
     rules.push('.daily-sheet .sheet-date, .daily-sheet .sheet-label, .daily-sheet .sheet-value, .daily-sheet .sheet-number, .daily-sheet .sheet-child, .daily-sheet .sheet-child-value, .daily-sheet .sheet-row { background-color: transparent !important; }');
   }
   if (theme.primaryButtonColor) {
