@@ -39,6 +39,17 @@ function IconReports() {
   );
 }
 
+function IconSuppliers() {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 5.5h9v8H2z" />
+      <path d="M11 8.5h3.5l3 3v2H11" />
+      <circle cx="5.5" cy="14.5" r="1.5" />
+      <circle cx="14.5" cy="14.5" r="1.5" />
+    </svg>
+  );
+}
+
 // ลำดับสถานะที่ต้องแสดง "รับเรื่อง" มาก่อนเสมอ ใช้ทั้งจัดเรียงก่อนแบ่งหน้าและจัดกลุ่มในตาราง
 // เพื่อไม่ให้การแบ่งหน้าตัดกลุ่มสถานะเดียวกันขาดออกจากกันแบบสุ่มตามวันที่
 const STATUS_ORDER = ['รับเรื่อง', 'รอดำเนินการ', 'รอจัดคิวช่าง', 'กำลังดำเนินการ', 'รอลูกค้าสรุปงาน', 'รอส่งสื่อตามวันที่ลูกค้ากำหนด', 'รออะไหล่', 'เสนอราคา', 'เรียบร้อยปกติ', 'ยกเลิก'];
@@ -63,6 +74,7 @@ const emptyRequest = {
   jobType: 'แนะนำ',
   status: 'รับเรื่อง',
   assignee: '',
+  supplier: '',
   appointment: '',
   appointmentEnd: '',
   action: '',
@@ -741,6 +753,9 @@ function App() {
           <button className={`nav-item ${view === 'reports' ? 'active' : ''}`} onClick={() => setView('reports')} title="รายงานและสถิติ ประจำวัน">
             <span className="nav-icon"><IconReports /></span> <span className="nav-label">รายงานและสถิติ ประจำวัน</span>
           </button>
+          <button className={`nav-item ${view === 'suppliers' ? 'active' : ''}`} onClick={() => setView('suppliers')} title="ติดตามงานซัพ">
+            <span className="nav-icon"><IconSuppliers /></span> <span className="nav-label">ติดตามงานซัพ</span>
+          </button>
         </nav>
         <div className="side-foot">
           <div className="status-dot" />
@@ -872,6 +887,11 @@ function App() {
               </div>
             </div>
           )
+        ) : view === 'suppliers' ? (
+          <SupplierTracking
+            requests={requests}
+            onOpen={(request) => { setView('requests'); setSelectedRequest(request); }}
+          />
         ) : (
           <Dashboard requests={requests} />
         )}
@@ -1105,6 +1125,81 @@ function RequestsView({ filtered, pageItems, query, setQuery, status, setStatus,
   );
 }
 
+// หน้าติดตามงานซัพ: งานที่ระบุซัพพลายเออร์ จัดกลุ่มตามซัพ เรียงงานค้างนานสุดก่อน
+function SupplierTracking({ requests, onOpen }) {
+  const [showDone, setShowDone] = useState(false);
+  const [supplierFilter, setSupplierFilter] = useState('ทั้งหมด');
+  const closed = (r) => ['เรียบร้อยปกติ', 'ยกเลิก'].includes(r.status);
+  const withSupplier = useMemo(() => requests.filter((r) => String(r.supplier || '').trim()), [requests]);
+  const suppliers = useMemo(() => uniqueSorted(withSupplier.map((r) => r.supplier)), [withSupplier]);
+  const groups = useMemo(() => {
+    const items = withSupplier
+      .filter((r) => showDone || !closed(r))
+      .filter((r) => supplierFilter === 'ทั้งหมด' || r.supplier.trim() === supplierFilter);
+    return suppliers
+      .map((name) => ({
+        name,
+        items: items
+          .filter((r) => r.supplier.trim() === name)
+          .sort((a, b) => new Date(a.receivedAt || a.createdAt || 0) - new Date(b.receivedAt || b.createdAt || 0)),
+      }))
+      .filter((g) => g.items.length);
+  }, [withSupplier, suppliers, showDone, supplierFilter]);
+  const openCount = withSupplier.filter((r) => !closed(r)).length;
+  const daysOpen = (r) => {
+    const start = new Date(r.receivedAt || r.createdAt || Date.now());
+    return Math.max(0, Math.floor((Date.now() - start) / 86400000));
+  };
+  const cell = { padding: '10px', borderBottom: '1px solid var(--line-color, #eef1ef)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' };
+
+  return (
+    <section style={{ padding: '8px 4px' }}>
+      <h2 style={{ margin: '0 0 16px', color: 'var(--ink)' }}>ติดตามงานซัพ</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+        <Metric label="งานซัพที่ยังค้าง" value={openCount} className="accent" />
+        <Metric label="จำนวนซัพ" value={suppliers.length} />
+        <Metric label="งานซัพทั้งหมด" value={withSupplier.length} />
+      </div>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
+        <select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)} style={{ height: '40px', borderRadius: '12px', padding: '0 12px', minWidth: '200px' }}>
+          <option>ทั้งหมด</option>
+          {suppliers.map((s) => <option key={s}>{s}</option>)}
+        </select>
+        <label style={{ display: 'flex', gap: '6px', alignItems: 'center', color: 'var(--ink)' }}>
+          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> แสดงงานที่ปิดแล้ว
+        </label>
+      </div>
+      {groups.length === 0 ? (
+        <p style={{ color: 'var(--ink)' }}>ยังไม่มีงานที่ระบุซัพพลายเออร์ — เลือกซัพได้ที่ช่อง "ซัพพลายเออร์" ในฟอร์มงาน</p>
+      ) : groups.map((group) => (
+        <div key={group.name} style={{ marginBottom: '18px', border: '1px solid var(--line-color, #e4e9e8)', borderRadius: '14px', overflow: 'hidden' }}>
+          <div style={{ padding: '10px 14px', fontWeight: 700, background: 'var(--table-group-bg, #f4f9f9)', color: 'var(--ink)' }}>
+            {group.name} <span style={{ fontWeight: 400 }}>({group.items.length} งาน)</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.3fr 2fr 1.1fr 0.7fr', fontSize: '13px', color: 'var(--ink)' }}>
+            {['เลขติดตาม', 'ลูกค้า', 'สถานที่/สาขา', 'รายละเอียด', 'สถานะ', 'ค้าง (วัน)'].map((h) => (
+              <div key={h} style={{ ...cell, cursor: 'default', fontWeight: 700, background: 'var(--table-head-bg, #f7f8fc)' }}>{h}</div>
+            ))}
+            {group.items.map((r) => {
+              const days = closed(r) ? '-' : daysOpen(r);
+              return (
+                <React.Fragment key={r.id}>
+                  <div style={cell} onClick={() => onOpen(r)}>{r.ticket || '-'}</div>
+                  <div style={cell} onClick={() => onOpen(r)}>{r.customer || '-'}</div>
+                  <div style={cell} onClick={() => onOpen(r)}>{r.location || '-'}</div>
+                  <div style={cell} onClick={() => onOpen(r)} title={r.description}>{r.description || '-'}</div>
+                  <div style={cell} onClick={() => onOpen(r)}>{r.status || '-'}</div>
+                  <div style={{ ...cell, fontWeight: 700, color: days !== '-' && days >= 7 ? '#c0392b' : 'inherit' }} onClick={() => onOpen(r)}>{days}</div>
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function Metric({ label, value, className = '', style = {} }) {
   return (
     <div className="metric" style={{ background: '#fff', border: '1px solid #edf0ef', borderRadius: '18px', boxShadow: '0 8px 22px rgba(24, 36, 43, 0.04)', padding: '16px', ...style }}>
@@ -1124,6 +1219,7 @@ const deriveOptionsFromRequests = (requests) => ({
   // ผู้ดำเนินการเก่าบางงานพิมพ์รวมกันเป็นสตริงเดียวคั่นด้วย "," (เช่น "PLAY, อีฟ")
   // แยกออกเป็นชื่อเดี่ยวๆ ก่อน ไม่ให้ตัวเลือกในดรอปดาวน์เหลือเป็นก้อนรวมชื่อ
   assignee: uniqueSorted(requests.flatMap((r) => String(r.assignee || '').split(','))),
+  supplier: uniqueSorted(requests.map((r) => r.supplier)),
 });
 
 const mergeOptions = (...lists) => uniqueSorted(lists.flat());
@@ -1311,6 +1407,18 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
               }}
               onRemoveOption={(value) => handleRemoveDropdownValue('assignee', value)}
               multiple
+            />
+            <EditableDropdown
+              name="supplier"
+              label="ซัพพลายเออร์"
+              value={form.supplier || ''}
+              options={excludeHidden(mergeOptions(dropdownData.supplier || [], historyOptions.supplier), dropdownData.hidden?.supplier)}
+              onChange={update}
+              onAddOption={(value) => {
+                handleAddDropdownValue('supplier', value);
+                update({ target: { name: 'supplier', value } });
+              }}
+              onRemoveOption={(value) => handleRemoveDropdownValue('supplier', value)}
             />
             {form.status === 'กำลังดำเนินการ' && (
               <>
