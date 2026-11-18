@@ -16,6 +16,7 @@ const PORT = Number(process.env.PORT || 4001);
 const REQUEST_COLUMNS = [
   'id', 'customer', 'ref', 'source', 'receivedAt', 'ticket', 'location', 'site',
   'contact', 'phone', 'description', 'image', 'ma', 'jobType', 'status', 'assignee', 'supplier',
+  'supplierNotifiedAt', 'supplierIssue', 'supplierStatus', 'supplierFollowUpAt', 'supplierNote',
   'appointment', 'appointmentEnd', 'action', 'result', 'equipment', 'completedImage',
   'completedAt', 'map', 'vehicle', 'notes', 'file', 'createdAt', 'updatedAt',
 ];
@@ -186,6 +187,11 @@ app.post('/api/requests', async (req, res) => {
         status: body.status || null,
         assignee: body.assignee || null,
         supplier: body.supplier || null,
+        supplierNotifiedAt: body.supplierNotifiedAt ? bangkokInputToISOString(body.supplierNotifiedAt) : null,
+        supplierIssue: body.supplierIssue || null,
+        supplierStatus: body.supplierStatus || null,
+        supplierFollowUpAt: body.supplierFollowUpAt ? bangkokInputToISOString(body.supplierFollowUpAt) : null,
+        supplierNote: body.supplierNote || null,
         appointment: body.appointment ? bangkokInputToISOString(body.appointment) : null,
         appointmentEnd: body.appointmentEnd ? bangkokInputToISOString(body.appointmentEnd) : null,
         action: body.action || null,
@@ -239,6 +245,12 @@ app.put('/api/requests/:id', async (req, res) => {
     setIfDefined('result', body.result);
     setIfDefined('equipment', body.equipment);
     setIfDefined('supplier', body.supplier);
+    // ช่องวันที่ซัพ: ส่งค่าว่างมา = ล้างค่า (ต่างจากวันที่อื่นที่ข้ามไป)
+    if (body.supplierNotifiedAt !== undefined) updates.supplierNotifiedAt = bangkokInputToISOString(body.supplierNotifiedAt);
+    setIfDefined('supplierIssue', body.supplierIssue);
+    setIfDefined('supplierStatus', body.supplierStatus);
+    if (body.supplierFollowUpAt !== undefined) updates.supplierFollowUpAt = bangkokInputToISOString(body.supplierFollowUpAt);
+    setIfDefined('supplierNote', body.supplierNote);
     setIfDefined('completedImage', body.completedImage);
     setIfDefined('completedAt', body.completedAt ? bangkokInputToISOString(body.completedAt) : undefined);
     setIfDefined('map', body.map);
