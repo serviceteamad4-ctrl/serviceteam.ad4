@@ -9,6 +9,7 @@ const primaryFilterFields = [
   ['completedAt', 'วันเวลาเสร็จ'],
   ['jobType', 'ลักษณะงาน'],
   ['assignee', 'ผู้ดำเนินการ'],
+  ['supplier', 'ซัพพลายเออร์'],
   ['source', 'แหล่งที่มา'],
 ];
 
