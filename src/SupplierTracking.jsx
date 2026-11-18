@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
+import { FileField } from './App.jsx';
 
 // งานติดตามซัพ: เก็บในตาราง supplier_tasks แยกจากงานแจ้งบริการโดยสิ้นเชิง
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 const STATUSES = ['แจ้งแล้ว', 'ติดตามแล้ว', 'แก้แล้ว'];
 const STATUS_COLOR = { 'แจ้งแล้ว': '#d97706', 'ติดตามแล้ว': '#2563eb', 'แก้แล้ว': '#16a34a' };
-const EMPTY = { supplier: '', topic: '', location: '', notified_at: '', status: 'แจ้งแล้ว', follow_up_at: '', note: '' };
+const EMPTY = { supplier: '', topic: '', location: '', notified_at: '', status: 'แจ้งแล้ว', follow_up_at: '', note: '', image: '', fixed_image: '' };
 
 // input datetime-local ต้องการ "YYYY-MM-DDTHH:mm" เวลาไทย
 const toLocalInput = (value) => {
@@ -81,7 +82,7 @@ export default function SupplierTracking() {
 
   const cell = { padding: '10px', borderBottom: '1px solid var(--line-color, #eef1ef)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' };
   const btn = { padding: '3px 8px', borderRadius: '8px', border: '1px solid var(--line-color, #ccc)', background: 'transparent', color: 'inherit', fontSize: '12px', cursor: 'pointer', marginRight: '4px' };
-  const headers = ['ซัพแจ้งเรื่อง', 'สาขา/สถานที่', 'แจ้งเมื่อ', 'สถานะ', 'ติดตามล่าสุด / ผล', 'ค้าง (วัน)', 'อัปเดต'];
+  const headers = ['รูป', 'ซัพแจ้งเรื่อง', 'สาขา/สถานที่', 'แจ้งเมื่อ', 'สถานะ', 'ติดตามล่าสุด / ผล', 'ค้าง (วัน)', 'อัปเดต'];
 
   return (
     <section style={{ padding: '8px 4px' }}>
@@ -114,7 +115,7 @@ export default function SupplierTracking() {
           <div style={{ padding: '10px 14px', fontWeight: 700, background: 'var(--table-group-bg, #f4f9f9)', color: 'var(--ink)' }}>
             {group.name} <span style={{ fontWeight: 400 }}>({group.items.length} งาน)</span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.1fr 0.9fr 0.8fr 1.8fr 0.6fr 1.3fr', minWidth: '960px', fontSize: '13px', color: 'var(--ink)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '0.5fr 2fr 1.1fr 0.9fr 0.8fr 1.8fr 0.6fr 1.3fr', minWidth: '1020px', fontSize: '13px', color: 'var(--ink)' }}>
             {headers.map((h) => <div key={h} style={{ ...cell, cursor: 'default', fontWeight: 700, background: 'var(--table-head-bg, #f7f8fc)' }}>{h}</div>)}
             {group.items.map((t) => {
               const days = done(t) ? null : daysSince(since(t));
@@ -122,6 +123,14 @@ export default function SupplierTracking() {
               const edit = () => setEditing({ ...t, notified_at: t.notified_at ? toLocalInput(t.notified_at) : '', follow_up_at: t.follow_up_at ? toLocalInput(t.follow_up_at) : '' });
               return (
                 <React.Fragment key={t.id}>
+                  <div style={{ ...cell, padding: '4px 10px', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    {[t.image, t.fixed_image].filter(Boolean).map((url) => (
+                      <a key={url} href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                        <img src={url} alt="" loading="lazy" style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: '6px', display: 'block' }} />
+                      </a>
+                    ))}
+                    {!t.image && !t.fixed_image && <span onClick={edit}>-</span>}
+                  </div>
                   <div style={cell} onClick={edit} title={t.topic}>{t.topic || '-'}</div>
                   <div style={cell} onClick={edit} title={t.location}>{t.location || '-'}</div>
                   <div style={cell} onClick={edit}>{shortDate(t.notified_at)}</div>
@@ -173,6 +182,7 @@ function TaskForm({ task, suppliers, onClose, onSave, onDelete }) {
         <label style={field}>แจ้งเรื่องอะไร
           <textarea name="topic" rows={3} value={form.topic || ''} onChange={set} style={input} />
         </label>
+        <ImageSlot name="image" label="รูปตอนแจ้ง" value={form.image} onChange={set} />
         <label style={field}>สาขา/สถานที่
           <input name="location" value={form.location || ''} onChange={set} style={input} />
         </label>
@@ -192,12 +202,25 @@ function TaskForm({ task, suppliers, onClose, onSave, onDelete }) {
         <label style={field}>ผลการติดตาม / ซัพตอบว่าอะไร
           <textarea name="note" rows={3} value={form.note || ''} onChange={set} style={input} />
         </label>
+        <ImageSlot name="fixed_image" label="รูปหลังซัพแก้แล้ว" value={form.fixed_image} onChange={set} />
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {task.id && <button type="button" className="secondary-btn" onClick={onDelete} style={{ marginRight: 'auto', color: '#dc2626' }}>ลบ</button>}
           <button type="button" className="secondary-btn" onClick={onClose}>ยกเลิก</button>
           <button type="submit" className="primary-btn" disabled={saving}>{saving ? 'กำลังบันทึก…' : 'บันทึก'}</button>
         </div>
       </form>
+    </div>
+  );
+}
+
+// ช่องรูป: ใช้ตัวอัปโหลดเดียวกับฟอร์มงาน (เลือกไฟล์ / Ctrl+V) และแสดงรูปตัวอย่าง + ปุ่มเอารูปออก
+function ImageSlot({ name, label, value, onChange }) {
+  return (
+    <div style={{ display: 'grid', gap: '6px' }}>
+      <FileField name={name} label={label} value={value} onChange={onChange} />
+      {value && (
+        <button type="button" className="secondary-btn" style={{ justifySelf: 'start' }} onClick={() => onChange({ target: { name, value: '' } })}>เอารูปออก</button>
+      )}
     </div>
   );
 }

@@ -1363,7 +1363,7 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
   );
 }
 
-function FileField({ name, label, value, onChange }) {
+export function FileField({ name, label, value, onChange }) {
   const [isUploading, setIsUploading] = useState(false);
 
   const handleFile = (event) => uploadFile(event.target.files?.[0]);

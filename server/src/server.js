@@ -332,7 +332,7 @@ app.post('/api/upload', async (req, res) => {
 // ถ้าพังก็แค่ log ไว้ ไม่ปล่อยให้ทั้งเซิร์ฟเวอร์ start ไม่ขึ้นเพราะ migration เดียว
 
 // ---------- งานติดตามซัพ (ตาราง supplier_tasks แยกจากงานแจ้งบริการ) ----------
-const SUPPLIER_TASK_TEXT = ['supplier', 'topic', 'location', 'status', 'note'];
+const SUPPLIER_TASK_TEXT = ['supplier', 'topic', 'location', 'status', 'note', 'image', 'fixed_image'];
 const SUPPLIER_TASK_DATES = ['notified_at', 'follow_up_at'];
 const supplierTaskFields = (body) => {
   const out = {};
@@ -363,6 +363,10 @@ app.put('/api/supplier-tasks/:id', async (req, res) => {
 });
 
 app.delete('/api/supplier-tasks/:id', async (req, res) => {
+  const { data: existing } = await supabase.from('supplier_tasks').select('image, fixed_image').eq('id', req.params.id).maybeSingle();
+  for (const url of [existing?.image, existing?.fixed_image]) {
+    if (url) await removeImage('service-desk-images', url).catch(() => {});
+  }
   const { error } = await supabase.from('supplier_tasks').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ message: 'Failed to delete supplier task', error: String(error.message || error) });
   res.status(204).end();
