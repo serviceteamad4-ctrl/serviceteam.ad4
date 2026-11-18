@@ -109,6 +109,8 @@ export const buildThemeCss = (theme) => {
   if (theme.textColor) {
     rules.push(`:root { --ink: ${theme.textColor}; --modern-text: ${theme.textColor}; }`);
     rules.push(`body, .main-content, .page-heading h1, .metric strong { color: ${theme.textColor}; }`);
+    rules.push(`.dashboard-page h1, .dashboard-page .eyebrow, .dashboard-page .subheading { color: ${theme.textColor} !important; }`);
+    rules.push(`.page-heading h1, .daily-sheet, .daily-sheet .sheet-date, .daily-sheet .sheet-child, .daily-sheet .sheet-child-value, .daily-sheet .sheet-number { color: ${theme.textColor} !important; }`);
     // หัวคอลัมน์ตารางเดิมเป็นสีเทาตายตัว บนพื้นเข้มมองไม่เห็น ให้ตามสีตัวหนังสือไปด้วย
     rules.push(`:root { --table-head-text: ${theme.textColor}; }`);
   }
@@ -119,10 +121,11 @@ export const buildThemeCss = (theme) => {
   if (theme.inputColor) {
     // ช่องค้นหา ช่องเดือน ช่องสถานะ (สีขาวตั้งไว้ในโค้ดตรงๆ) ตัวหนังสือในช่องตัดกับพื้นช่องเสมอ
     const inputText = readableTextOn(theme.inputColor);
-    rules.push(`.search-box, .ui-toolbar select { background: ${toCssFill(theme.inputColor)} !important; }`);
-    rules.push(`.search-box input, .ui-toolbar select, .search-box input::placeholder { color: ${inputText} !important; }`);
-    rules.push(`.ui-toolbar select option { color: #18242b; background: #fff; }`);
-    if (inputText === '#ffffff') rules.push('.search-box input[type="month"] { color-scheme: dark; }');
+    // ครอบคลุมทุก select/ช่องวันที่ในเนื้อหา (ช่องจำนวนต่อหน้า, ช่องวันที่หน้ารายงาน, ตัวเลือกซัพ ฯลฯ) ไม่ใช่แค่แถบเครื่องมือ
+    rules.push(`.search-box, .main-content select, .main-content input[type="date"], .main-content input[type="month"] { background: ${toCssFill(theme.inputColor)} !important; }`);
+    rules.push(`.search-box input, .main-content select, .main-content input[type="date"], .main-content input[type="month"], .search-box input::placeholder { color: ${inputText} !important; }`);
+    rules.push(`.main-content select option { color: #18242b; background: #fff; }`);
+    if (inputText === '#ffffff') rules.push('.main-content input[type="month"], .main-content input[type="date"], .main-content select { color-scheme: dark; }');
   }
   if (theme.tableHeadTextColor) {
     rules.push(`:root { --table-head-text: ${theme.tableHeadTextColor}; }`);
@@ -138,6 +141,8 @@ export const buildThemeCss = (theme) => {
     const image = theme.backgroundImage ? `url("${theme.backgroundImage}") center / cover no-repeat, ` : '';
     // fixed: ไล่สีกับรูปยึดตามหน้าจอ ไม่ยืดตามความยาวทั้งหน้า (ตารางยาวมาก ไล่สีจะจางจนแทบไม่เห็น)
     rules.push(`body { background: ${image}${fill} !important; background-attachment: fixed !important; }`);
+    // หน้ารายงานประจำวันมีพื้นเทาอ่อนของตัวเอง ทำให้ธีมมืดกลายเป็นพื้นขาว
+    rules.push('.dashboard-page { background: transparent !important; }');
   }
   // แถบด้านบนกับกล่องตัวกรองเดิมเป็นสีขาวโปร่งแสง วางบนพื้นหลังสีเข้มแล้วกลายเป็นสีเทา
   // ตั้งสีแล้วให้เป็นสีทึบตามที่เลือก
@@ -147,10 +152,12 @@ export const buildThemeCss = (theme) => {
   const panelOpacity = theme.panelOpacity && theme.panelOpacity < 100 ? theme.panelOpacity / 100 : 1;
   if (theme.panelColor || panelOpacity < 1) {
     const fill = withAlpha(theme.panelColor || THEME_FALLBACKS.panelColor, panelOpacity);
-    rules.push(`.ui-toolbar, .metric, .table-wrap, .detail-card, .requests-split-detail { background: ${toCssFill(fill)} !important; backdrop-filter: none !important; }`);
+    rules.push(`.ui-toolbar, .metric, .table-wrap, .detail-card, .requests-split-detail, .daily-sheet-card { background: ${toCssFill(fill)} !important; backdrop-filter: none !important; }`);
     // แถบหัวกลุ่มสถานะ/หัวคอลัมน์ในตาราง: ใช้สีเทาโปร่งทับสีกล่อง ให้ต่างจากแถวข้อมูลนิดหน่อย
     // ไม่งั้นแถบยังเป็นสีอ่อนเดิม แล้วตัวหนังสือสีอ่อนที่ตั้งไว้จะมองไม่เห็น
     rules.push(':root { --table-group-bg: rgba(128, 128, 128, 0.18); --table-head-bg: rgba(128, 128, 128, 0.1); }');
+    // ตารางรายงานประจำวัน: แต่ละช่องตั้งพื้นขาว/สีอ่อนไว้ตายตัว ให้โปร่งเห็นสีกล่องแทน
+    rules.push('.daily-sheet .sheet-date, .daily-sheet .sheet-label, .daily-sheet .sheet-value, .daily-sheet .sheet-number, .daily-sheet .sheet-child, .daily-sheet .sheet-child-value, .daily-sheet .sheet-row { background-color: transparent !important; }');
   }
   if (theme.primaryButtonColor) {
     rules.push(`.primary-btn { background: ${toCssFill(theme.primaryButtonColor)} !important; color: ${readableTextOn(theme.primaryButtonColor)} !important; box-shadow: none !important; }`);
