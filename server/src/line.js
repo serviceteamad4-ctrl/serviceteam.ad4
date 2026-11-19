@@ -183,24 +183,34 @@ const runInGroupOrder = (groupKey, task) => {
   return next;
 };
 
-// ข้อความเคสจาก True (ไม่มีคำว่า "แจ้งปิดงาน") เช่น
-//   ชื่อ Shop : True Branding Shop One Bangkok 4FL.
-//   วิธีแก้ : ทำการขึ้นสื่อในระบบ เรียบร้อยครับ
-// มี "ชื่อ Shop" + หัวข้อที่มีคำว่า "แก้" (วิธีแก้/แนวทางแก้ไข/แก้ไข) หรือ "อัพเดทเคส" = แจ้งปิดงานของร้านนั้น (ลูกค้า True)
 const FIX_LABEL = /(แก้|อ[ัะ]?[พป]เด[ทต]\s*เคส|update)/i;
-const parseTrueCaseClose = (lines) => {
-  let shop = '';
-  let fix = '';
+// ข้อความเคสจาก True: มี "ชื่อ Shop" + หัวข้อแก้ไข = ปิดงาน, มี "ชื่อ Shop" + "ปัญหา" (ไม่มีหัวข้อแก้ไข) = เปิดงาน
+const parseTrueCase = (lines) => {
+  const f = {};
   for (const line of lines) {
     const match = line.match(/^([^:：]+)[:：]\s*(.*)$/);
     if (!match || !match[2].trim()) continue;
     const label = match[1].trim();
-    const value = match[2].trim();
-    if (!fix && FIX_LABEL.test(label)) fix = value;
-    else if (!shop && /^ชื่อ\s*shop/i.test(label)) shop = value;
+    const value = match[2].replace(/^[:：\s]+/, '').trim();
+    if (!value) continue;
+    const key = FIX_LABEL.test(label) ? 'fix'
+      : /^ชื่อ\s*shop/i.test(label) ? 'shop'
+      : /^รายละเอียดปัญหา/.test(label) ? 'detail'
+      : /^ปัญหา/.test(label) ? 'problem'
+      : /^(ชื่อ)?ผู้แจ้ง/.test(label) ? 'contact'
+      : /^เบอร์/.test(label) ? 'phone'
+      : /^(ที่อยู่|อาคาร)/.test(label) ? 'site'
+      : null;
+    if (key && !f[key]) f[key] = value;
   }
-  if (!shop || !fix) return null;
-  return { kind: 'close', fields: { customer: 'True', location: shop, jobName: shop, action: fix } };
+  if (!f.shop) return null;
+  const base = { customer: 'True', location: f.shop, jobName: f.shop };
+  if (f.fix) return { kind: 'close', fields: { ...base, action: f.fix } };
+  if (!f.problem && !f.detail) return null;
+  return {
+    kind: 'open',
+    fields: { ...base, contact: f.contact, phone: f.phone, site: f.site, description: f.detail || f.problem },
+  };
 };
 
 // คืนค่า { kind: 'open' | 'close', fields } หรือ null ถ้าไม่ใช่คำสั่ง
@@ -212,7 +222,7 @@ export const parseLineMessage = (text) => {
   if (lines[0].startsWith(TRIGGER_WORD)) kind = 'open';
   else if (lines[0].startsWith(CLOSE_TRIGGER_WORD)) kind = 'close';
   else if (lines[0].startsWith(MOVE_TRIGGER_WORD)) return { kind: 'move', fields: parseMoveMessage(lines) };
-  if (!kind) return parseTrueCaseClose(lines);
+  if (!kind) return parseTrueCase(lines);
 
   const fields = {};
   for (const line of lines.slice(1)) {
@@ -303,6 +313,7 @@ const createRequestFromFields = async (fields) => {
       ref: 'P1',
       source: 'ไลน์',
       location: fields.location || null,
+      site: fields.site || null,
       contact: fields.contact || null,
       phone: fields.phone || null,
       description: fields.description || null,
