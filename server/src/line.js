@@ -183,6 +183,26 @@ const runInGroupOrder = (groupKey, task) => {
   return next;
 };
 
+// ข้อความเคสจาก True (ไม่มีคำว่า "แจ้งปิดงาน") เช่น
+//   ชื่อ Shop : True Branding Shop One Bangkok 4FL.
+//   วิธีแก้ : ทำการขึ้นสื่อในระบบ เรียบร้อยครับ
+// มี "ชื่อ Shop" + หัวข้อที่มีคำว่า "แก้" (วิธีแก้/แนวทางแก้ไข/แก้ไข) หรือ "อัพเดทเคส" = แจ้งปิดงานของร้านนั้น (ลูกค้า True)
+const FIX_LABEL = /(แก้|อ[ัะ]?[พป]เด[ทต]\s*เคส|update)/i;
+const parseTrueCaseClose = (lines) => {
+  let shop = '';
+  let fix = '';
+  for (const line of lines) {
+    const match = line.match(/^([^:：]+)[:：]\s*(.*)$/);
+    if (!match || !match[2].trim()) continue;
+    const label = match[1].trim();
+    const value = match[2].trim();
+    if (!fix && FIX_LABEL.test(label)) fix = value;
+    else if (!shop && /^ชื่อ\s*shop/i.test(label)) shop = value;
+  }
+  if (!shop || !fix) return null;
+  return { kind: 'close', fields: { customer: 'True', location: shop, jobName: shop, action: fix } };
+};
+
 // คืนค่า { kind: 'open' | 'close', fields } หรือ null ถ้าไม่ใช่คำสั่ง
 export const parseLineMessage = (text) => {
   const lines = String(text || '').split('\n').map((line) => line.trim()).filter(Boolean);
@@ -192,7 +212,7 @@ export const parseLineMessage = (text) => {
   if (lines[0].startsWith(TRIGGER_WORD)) kind = 'open';
   else if (lines[0].startsWith(CLOSE_TRIGGER_WORD)) kind = 'close';
   else if (lines[0].startsWith(MOVE_TRIGGER_WORD)) return { kind: 'move', fields: parseMoveMessage(lines) };
-  if (!kind) return null;
+  if (!kind) return parseTrueCaseClose(lines);
 
   const fields = {};
   for (const line of lines.slice(1)) {
