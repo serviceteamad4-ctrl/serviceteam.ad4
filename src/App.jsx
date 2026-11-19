@@ -1148,6 +1148,56 @@ const mergeOptions = (...lists) => uniqueSorted(lists.flat());
 // เอาค่าที่ผู้ใช้กดลบทิ้งไว้ (hidden) ออกจากรายการ ไม่ว่าค่านั้นจะมาจากที่พิมพ์เพิ่มเองหรือดึงจากประวัติงานจริง
 const excludeHidden = (options, hiddenList = []) => options.filter((opt) => !hiddenList.includes(opt));
 
+// แยกข้อความแจ้งงานที่ก้อปมา (รูปแบบ "หัวข้อ : ค่า") แล้วแปลงเป็นค่าในฟอร์ม เติมเฉพาะช่องที่มีข้อมูล
+const PASTE_KEYS = [
+  ['ref', /^(เลข\s*)?case\s*id/i],
+  ['customer', /^lease/i],
+  ['vip', /^shop\s*vip/i],
+  ['shopType', /^shop\s*type/i],
+  ['location', /^ชื่อ\s*shop/i],
+  ['code', /^code/i],
+  ['problem', /^ปัญหา/],
+  ['detail', /^รายละเอียดปัญหา/],
+  ['area', /^บริเวณ/],
+  ['contact', /^ชื่อผู้แจ้ง/],
+  ['phone', /^เบอร์/],
+  ['hours', /^เวลาเปิด/],
+  ['site', /^ที่อยู่/],
+  ['fix', /(แก้|อ[ัะ]?[พป]เด[ทต]\s*เคส|update)/i],
+];
+
+function parsePastedCase(raw) {
+  const data = {};
+  String(raw || '').split(/\r?\n/).forEach((line) => {
+    const idx = line.search(/[:：]/);
+    if (idx < 0) return;
+    const label = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    if (!label || !value) return;
+    // เช็ค "รายละเอียดปัญหา" ก่อน "ปัญหา"
+    // หัวข้อที่มีคำว่า "แก้" (วิธีแก้/แนวทางแก้ไข/แก้ไข) = ปิดงาน ให้เช็คก่อน แล้วค่อย "รายละเอียดปัญหา" ก่อน "ปัญหา"
+    const rank = (k) => (k === 'fix' ? 0 : k === 'detail' ? 1 : 2);
+    const ordered = [...PASTE_KEYS].sort((a, b) => rank(a[0]) - rank(b[0]));
+    const hit = ordered.find(([, re]) => re.test(label));
+    if (hit && !data[hit[0]]) data[hit[0]] = value;
+  });
+  const result = {};
+  ['location', 'site', 'contact', 'phone'].forEach((k) => {
+    if (data[k]) result[k] = data[k];
+  });
+  // ข้อมูลการรับแจ้ง = รายละเอียดปัญหา (ถ้าไม่มี ใช้หัวข้อ "ปัญหา" แทน)
+  if (data.detail || data.problem) result.description = data.detail || data.problem;
+  // มี "วิธีแก้" หรือ "อัพเดทเคส" = แจ้งปิดงาน
+  if (data.fix) {
+    result.action = data.fix;
+    result.status = 'เรียบร้อยปกติ';
+    result.completedAt = toDateTimeLocalValue();
+  }
+  if (!Object.keys(result).length) return result;
+  // งานที่มาจากข้อความแจ้งของ True: Ref = P1, ลูกค้า = true เสมอ
+  return { ref: 'P1', customer: 'true', ...result };
+}
+
 function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
   const [form, setForm] = useState(() => ({
     ...emptyRequest,
@@ -1160,6 +1210,17 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
   }));
   const [dropdownData, setDropdownData] = useState(getStoredDropdownData());
   const [isSaving, setIsSaving] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+
+  const applyPaste = () => {
+    const parsed = parsePastedCase(pasteText);
+    if (!Object.keys(parsed).length) {
+      alert('ไม่พบข้อมูลในข้อความ (ต้องเป็นรูปแบบ "หัวข้อ : ค่า")');
+      return;
+    }
+    setForm((prev) => ({ ...prev, ...parsed }));
+    setPasteText('');
+  };
 
   const historyOptions = useMemo(() => deriveOptionsFromRequests(requests), [requests]);
 
@@ -1234,6 +1295,18 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
           }
         }}>
           <div className="editor-grid">
+            <div className="editor-field editor-field-span">
+              <span>วางข้อความแจ้งงาน (เติมฟอร์มอัตโนมัติ)</span>
+              <textarea
+                rows={3}
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                placeholder={'เลข Case ID : CASE-xxxx\nชื่อ Shop : ...\nปัญหา : ...'}
+              />
+              <button type="button" className="secondary-btn" style={{ marginTop: 6, alignSelf: 'flex-start' }} onClick={applyPaste} disabled={!pasteText.trim()}>
+                ดึงข้อมูลลงฟอร์ม
+              </button>
+            </div>
             {text('ref', 'Ref.', true)}
             <EditableDropdown
               name="source"

@@ -87,7 +87,9 @@ export const getStoredDropdownData = () => {
       const combined = Array.from(new Set([...(DEFAULT_DROPDOWN_DATA[field] || []), ...(parsed[field] || [])]))
         // ชื่อเก่า "รอเสนอราคา" ที่อาจค้างอยู่ใน localStorage ของเครื่อง เปลี่ยนเป็นชื่อใหม่แล้ว
         .filter((value) => !(field === 'status' && value === 'รอเสนอราคา'));
-      merged[field] = combined.filter((value) => !(hidden[field] || []).includes(value));
+      // สถานะหลักของระบบ (ใช้ใน Dashboard/การจัดกลุ่ม) ลบ/ซ่อนไม่ได้ กันเผลอกดถังขยะแล้วสถานะหาย
+      merged[field] = combined.filter((value) => (field === 'status' && DEFAULT_DROPDOWN_DATA.status.includes(value))
+        || !(hidden[field] || []).includes(value));
     });
 
     return merged;
@@ -116,6 +118,7 @@ export const addDropdownValue = (field, value) => {
 
 // ลบตัวเลือกออกจากดรอปดาวน์ ใช้ได้ทั้งค่าที่พิมพ์เพิ่มเองและค่าที่ดึงมาจากประวัติงานจริง
 export const removeDropdownValue = (field, value) => {
+  if (field === 'status' && DEFAULT_DROPDOWN_DATA.status.includes(value)) return;
   const data = getStoredDropdownData();
   if (data[field]) {
     data[field] = data[field].filter((item) => item !== value);
