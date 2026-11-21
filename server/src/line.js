@@ -318,7 +318,8 @@ export const parseLineMessage = (text) => {
       continue;
     }
     const match = line.match(/^([^:：]+)[:：]\s*(.*)$/);
-    const field = match ? LABEL_TO_FIELD[match[1].trim()] : null;
+    // "วันที่ , เวลา" (เว้นวรรคหน้า/หลังจุลภาค) = "วันที่, เวลา"
+    const field = match ? LABEL_TO_FIELD[match[1].trim().replace(/\s*,\s*/g, ', ')] : null;
     if (field) {
       if (match[2].trim()) fields[field] = match[2].trim();
       continue;
