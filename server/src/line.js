@@ -100,6 +100,8 @@ const LABEL_TO_FIELD = {
   'ชื่อร้าน': 'jobName',
   'รายละเอียดงาน': 'detail',
   'ลักษณะงาน': 'jobType',
+  'อุปกรณ์': 'equipment',
+  'เกี่ยวกับอุปกรณ์': 'equipment',
   // เวลาจริงที่เปิด/ปิดงาน เผื่อส่งข้อความทีหลัง เช่น "เวลา: 16.22"
   'เวลา': 'time',
   'เวลาแจ้ง': 'time',
@@ -183,12 +185,19 @@ const runInGroupOrder = (groupKey, task) => {
   return next;
 };
 
-const FIX_LABEL = /(แก้|อ[ัะ]?[พป]เด[ทต]\s*เคส|update)/i;
+// หัวข้อปิดงานต้องขึ้นต้นด้วยคำเหล่านี้ และสั้น (กันประโยคอย่าง "รบกวนเข้าแก้ไขปัญหาภายใน 48 ชม ... 12:57" ที่มี : จากเวลา)
+const FIX_LABEL = /^((วิธี|แนวทาง(การ)?|การ)?แก้(ไข)?(ปัญหา)?|อ[ัะ]?[พป]เด[ทต]\s*เคส|update)\s*$/i;
+// บรรทัดแรก "แจ้งงานใหม่" / "แจ้งงานซ่อมใหม่" = เปิดงานเสมอ ไม่ว่าข้างในจะมีคำว่าแก้ไข
+const NEW_CASE_HEADER = /^\**\s*แจ้งงาน(ซ่อม)?ใหม่/;
+// หัวข้อปิดงานที่พิมพ์ตามด้วยช่องว่างแทน : (เฉพาะคำที่ชัดเจน กันประโยคทั่วไปที่ขึ้นต้นด้วย "แก้ไข")
+const NO_COLON_FIX = /^(วิธี(?:การ)?แก้(?:ไข)?|แนวทาง(?:การ)?แก้(?:ไข)?|อ[ัะ]?[พป]เด[ทต]\s*เคส)\s+([^:：\s].*)$/;
 // ข้อความเคสจาก True: มี "ชื่อ Shop" + หัวข้อแก้ไข = ปิดงาน, มี "ชื่อ Shop" + "ปัญหา" (ไม่มีหัวข้อแก้ไข) = เปิดงาน
 const parseTrueCase = (lines) => {
   const f = {};
   for (const line of lines) {
-    const match = line.match(/^([^:：]+)[:：]\s*(.*)$/);
+    // "วิธีแก้ไข แนะนำสาขา..." (ไม่มี : ) ก็นับเป็นหัวข้อปิดงาน
+    const bareFix = line.match(NO_COLON_FIX);
+    const match = bareFix ? [line, bareFix[1], bareFix[2]] : line.match(/^([^:：]+)[:：]\s*(.*)$/);
     if (!match || !match[2].trim()) continue;
     const label = match[1].trim();
     const value = match[2].replace(/^[:：\s]+/, '').trim();
@@ -200,16 +209,63 @@ const parseTrueCase = (lines) => {
       : /^(ชื่อ)?ผู้แจ้ง/.test(label) ? 'contact'
       : /^เบอร์/.test(label) ? 'phone'
       : /^(ที่อยู่|อาคาร)/.test(label) ? 'site'
+      : /^(เกี่ยวกับ)?อุปกรณ์/.test(label) ? 'equipment'
       : null;
     if (key && !f[key]) f[key] = value;
   }
   if (!f.shop) return null;
   const base = { customer: 'True', location: f.shop, jobName: f.shop };
-  if (f.fix) return { kind: 'close', fields: { ...base, action: f.fix } };
+  if (f.fix && !NEW_CASE_HEADER.test(lines[0])) return { kind: 'close', fields: { ...base, action: f.fix, equipment: f.equipment } };
   if (!f.problem && !f.detail) return null;
   return {
     kind: 'open',
     fields: { ...base, contact: f.contact, phone: f.phone, site: f.site, description: f.detail || f.problem },
+  };
+};
+
+// รายงานจบงานของช่าง (ไม่มีคำว่า "แจ้งปิดงาน") เช่น
+//   ผู้ดำเนินการ : เหน่ง หม่อง / ชื่องาน : Popmart / สถานที่ : Central Park
+//   วันที่ : 20/11/26 - 20/11/26 / เวลา : 22:00 - 05:00 / รายละเอียดงาน : เปลี่ยนแผ่นเสีย 6 แผ่น / ทะเบียนรถ : 3167
+// มี "ผู้ดำเนินการ" + "ชื่องาน" + "รายละเอียดงาน" = ปิดงาน (บรรทัด "สถานะ" ในรายงานไม่ใช้)
+const OPERATOR_LABELS = {
+  'ผู้ดำเนินการ': 'assignee',
+  'ชื่องาน': 'jobName',
+  'สถานที่': 'place',
+  'วันที่': 'date',
+  'เวลา': 'time',
+  'รายละเอียดงาน': 'action',
+  'ทะเบียนรถ': 'vehicle',
+};
+// วันจบ = วันที่ตัวหลัง + เวลาตัวหลัง ถ้าเวลาจบน้อยกว่าเวลาเริ่มในวันเดียวกัน (งานกลางคืน 22:00 - 05:00) = เช้าวันถัดไป
+const operatorCompletedAt = (date, time) => {
+  const dates = String(date || '').split(/\s*[-–~]\s*/).filter(Boolean);
+  const times = String(time || '').match(/\d{1,2}\s*[.:]\s*\d{2}/g) || [];
+  if (!times.length) return null;
+  const endDate = dates[dates.length - 1] || '';
+  const iso = parseThaiTime(`${endDate} ${times[times.length - 1]}`);
+  if (!iso) return null;
+  const crossesMidnight = times.length > 1 && dates.length <= 2 && (dates[0] || '') === endDate
+    && parseThaiTime(`${endDate} ${times[times.length - 1]}`) < parseThaiTime(`${endDate} ${times[0]}`);
+  return crossesMidnight ? new Date(new Date(iso).getTime() + 24 * 60 * 60 * 1000).toISOString() : iso;
+};
+const parseOperatorReport = (lines) => {
+  const f = {};
+  for (const line of lines) {
+    const match = line.match(/^([^:：]+?)\s*[:：]\s*(.*)$/);
+    const key = match && OPERATOR_LABELS[match[1].trim()];
+    if (key && match[2].trim() && !f[key]) f[key] = match[2].trim();
+  }
+  if (!f.assignee || !f.jobName || !f.action) return null;
+  return {
+    kind: 'close',
+    fields: {
+      assignee: f.assignee,
+      jobName: [f.jobName, f.place].filter(Boolean).join(' '),
+      location: f.place,
+      action: f.action,
+      vehicle: f.vehicle,
+      completedAtIso: operatorCompletedAt(f.date, f.time),
+    },
   };
 };
 
@@ -222,7 +278,7 @@ export const parseLineMessage = (text) => {
   if (lines[0].startsWith(TRIGGER_WORD)) kind = 'open';
   else if (lines[0].startsWith(CLOSE_TRIGGER_WORD)) kind = 'close';
   else if (lines[0].startsWith(MOVE_TRIGGER_WORD)) return { kind: 'move', fields: parseMoveMessage(lines) };
-  if (!kind) return parseTrueCase(lines);
+  if (!kind) return parseTrueCase(lines) || parseOperatorReport(lines);
 
   const fields = {};
   for (const line of lines.slice(1)) {
@@ -347,11 +403,27 @@ const findOpenRequests = async (fields) => {
     && (!location || normalizeText(row.location) === location));
 };
 
+// ไม่ได้ระบุ "อุปกรณ์" ตอนปิดงาน: เดาจากข้อความการดำเนินการ/วิธีแก้ (เช่น "restart กล่อง" = กล่องเล่นสื่อ) ไม่เข้าเงื่อนไขไหน = จอ LED
+export const guessEquipment = (text) => {
+  const t = String(text || '').toLowerCase();
+  if (/kiosk|คีออส|คีออช/.test(t)) return 'Kiosk';
+  if (/กล่อง|box|player|เครื่องเล่น|บอร์ด|board|android|เฟิร์มแวร์|firmware|3399|3566|a3/.test(t)) return 'กล่องเล่นสื่อ';
+  return 'จอ LED';
+};
+
 export const applyClose = async (requestId, fields, completedAt) => {
   const updates = { status: 'เรียบร้อยปกติ', completedAt };
+  if (fields.equipment) {
+    updates.equipment = fields.equipment;
+  } else {
+    // งานที่มีอุปกรณ์อยู่แล้วไม่ทับ
+    const { data: current } = await supabase.from('requests').select('equipment').eq('id', requestId).maybeSingle();
+    if (!current?.equipment) updates.equipment = guessEquipment(fields.action);
+  }
   if (fields.assignee) updates.assignee = fields.assignee;
   if (fields.action) updates.action = fields.action;
   if (fields.jobType) updates.jobType = fields.jobType;
+  if (fields.vehicle) updates.vehicle = fields.vehicle;
   const { error } = await supabase.from('requests').update(updates).eq('id', requestId);
   if (error) throw error;
   broadcastRequestsChanged();
@@ -401,6 +473,8 @@ const queuePendingClose = async (candidates, fields, completedAt, groupKey, extr
         assignee: fields.assignee || null,
         action: fields.action || null,
         jobType: fields.jobType || null,
+        equipment: fields.equipment || null,
+        vehicle: fields.vehicle || null,
         ...extra,
       },
       completed_at: completedAt,
@@ -414,7 +488,7 @@ const queuePendingClose = async (candidates, fields, completedAt, groupKey, extr
 };
 
 const closeRequestFromFields = async (fields, groupKey, rawText) => {
-  const completedAt = parseThaiDateTime(fields) || new Date().toISOString();
+  const completedAt = fields.completedAtIso || parseThaiDateTime(fields) || new Date().toISOString();
   // ไม่มีหัวข้อ "การดำเนินการ" ก็ใช้รายละเอียดงาน + บรรทัดอิสระที่เหลือ (สิ่งที่ทำ/อาการ) แทน
   if (!fields.action) {
     const combined = [fields.detail, ...(fields.extra || [])].filter(Boolean).join('\n');

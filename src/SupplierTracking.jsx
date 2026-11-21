@@ -63,7 +63,7 @@ export default function SupplierTracking() {
   const quick = async (task, status) => {
     setBusyId(task.id);
     try {
-      upsert(await api(`/${task.id}`, { method: 'PUT', body: JSON.stringify({ status, follow_up_at: new Date().toISOString() }) }));
+      upsert(await api(`/${task.id}`, { method: 'PUT', body: JSON.stringify(status === 'แจ้งแล้ว' ? { status } : { status, follow_up_at: new Date().toISOString() }) }));
     } catch (e) { fail(e); } finally { setBusyId(null); }
   };
 
@@ -138,12 +138,22 @@ export default function SupplierTracking() {
                   <div style={cell} onClick={edit} title={follow}>{follow}</div>
                   <div style={{ ...cell, fontWeight: 700, color: days !== null && days >= 7 ? '#dc2626' : 'inherit' }} onClick={edit}>{days ?? '-'}</div>
                   <div style={{ ...cell, cursor: 'default' }}>
-                    {!done(t) && (
-                      <>
-                        <button type="button" style={btn} disabled={busyId === t.id} onClick={() => quick(t, 'ติดตามแล้ว')}>ติดตามแล้ว</button>
-                        <button type="button" style={{ ...btn, color: '#16a34a', borderColor: '#16a34a' }} disabled={busyId === t.id} onClick={() => quick(t, 'แก้แล้ว')}>แก้แล้ว</button>
-                      </>
-                    )}
+                    {/* ปุ่มสถานะทั้ง 3 ตัว: ตัวที่เป็นสถานะปัจจุบันจะทึบสี กดเปลี่ยนกลับไปมาได้ (รวมย้อนกลับเป็น "แจ้งแล้ว") */}
+                    {STATUSES.map((s) => {
+                      const active = t.status === s;
+                      const color = STATUS_COLOR[s];
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          style={{ ...btn, color: active ? '#fff' : color, borderColor: color, background: active ? color : 'transparent' }}
+                          disabled={busyId === t.id || active}
+                          onClick={() => quick(t, s)}
+                        >
+                          {s}
+                        </button>
+                      );
+                    })}
                   </div>
                 </React.Fragment>
               );

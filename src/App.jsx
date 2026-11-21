@@ -1163,12 +1163,16 @@ const PASTE_KEYS = [
   ['phone', /^เบอร์/],
   ['hours', /^เวลาเปิด/],
   ['site', /^ที่อยู่/],
-  ['fix', /(แก้|อ[ัะ]?[พป]เด[ทต]\s*เคส|update)/i],
+  ['equipment', /^(เกี่ยวกับ)?อุปกรณ์/],
+  // หัวข้อปิดงานต้องเป็นคำเหล่านี้ล้วนๆ (กันประโยค "รบกวนเข้าแก้ไขปัญหาภายใน 48 ชม ... 12:57")
+  ['fix', /^((วิธี|แนวทาง(การ)?|การ)?แก้(ไข)?(ปัญหา)?|อ[ัะ]?[พป]เด[ทต]\s*เคส|update)\s*$/i],
 ];
 
 function parsePastedCase(raw) {
   const data = {};
-  String(raw || '').split(/\r?\n/).forEach((line) => {
+  String(raw || '').split(/\r?\n/).forEach((rawLine) => {
+    // "วิธีแก้ไข แนะนำสาขา..." (ไม่มี : ) ให้ถือเป็น "วิธีแก้ไข : แนะนำสาขา..."
+    const line = rawLine.trim().replace(/^(วิธี(?:การ)?แก้(?:ไข)?|แนวทาง(?:การ)?แก้(?:ไข)?|อ[ัะ]?[พป]เด[ทต]\s*เคส)\s+(?=[^:：\s])/, '$1 : ');
     const idx = line.search(/[:：]/);
     if (idx < 0) return;
     const label = line.slice(0, idx).trim();
@@ -1188,9 +1192,17 @@ function parsePastedCase(raw) {
   // ข้อมูลการรับแจ้ง = รายละเอียดปัญหา (ถ้าไม่มี ใช้หัวข้อ "ปัญหา" แทน)
   if (data.detail || data.problem) result.description = data.detail || data.problem;
   // มี "วิธีแก้" หรือ "อัพเดทเคส" = แจ้งปิดงาน
-  if (data.fix) {
+  // บรรทัดแรก "แจ้งงานใหม่" / "แจ้งงานซ่อมใหม่" = เปิดงานเสมอ
+  const firstLine = String(raw || '').split(/\r?\n/).map((l) => l.trim()).find(Boolean) || '';
+  if (data.fix && !/^\**\s*แจ้งงาน(ซ่อม)?ใหม่/.test(firstLine)) {
     result.action = data.fix;
     result.status = 'เรียบร้อยปกติ';
+    // ไม่ได้ระบุอุปกรณ์: เดาจากวิธีแก้ (กล่อง/บอร์ด = กล่องเล่นสื่อ, kiosk = Kiosk) ไม่งั้น จอ LED
+    const t = String(data.fix).toLowerCase();
+    result.equipment = data.equipment
+      || (/kiosk|คีออส/.test(t) ? 'Kiosk'
+        : /กล่อง|box|player|เครื่องเล่น|บอร์ด|board|android|firmware|เฟิร์มแวร์|3399|3566/.test(t) ? 'กล่องเล่นสื่อ'
+          : 'จอ LED');
     result.completedAt = toDateTimeLocalValue();
   }
   if (!Object.keys(result).length) return result;
