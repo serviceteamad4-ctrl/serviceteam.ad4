@@ -8,7 +8,7 @@ import FilterPanel from './FilterPanel.jsx';
 import EditableDropdown from './EditableDropdown.jsx';
 import { getStoredDropdownData, addDropdownValue, removeDropdownValue } from './excelDataManager.js';
 import { dateFields as filterDateFields, filterFieldLabels } from './FilterPanel.jsx';
-import { isViewableImageUrl } from './requestUtils.js';
+import { isViewableImageUrl, splitImages, joinImages } from './requestUtils.js';
 import { Mascot } from 'page-mascot';
 import LinePendingImages from './LinePendingImages.jsx';
 import LinePendingCloses from './LinePendingCloses.jsx';
@@ -268,42 +268,32 @@ const printPdf = async (title, exportItems = []) => {
         img.crossOrigin = 'anonymous';
       });
 
-      if (item.image || item.completedImage) {
+      // หลายรูปต่อช่อง: วางเป็นตาราง 3 รูปต่อแถว (ช่องละ 300x225 รักษาสัดส่วนรูป)
+      const drawImageGroup = async (title, urls) => {
+        if (!urls.length) return;
+        context.fillStyle = '#778196';
+        context.font = '17px Arial, sans-serif';
+        context.fillText(`${title} (${urls.length} รูป)`, 88, y);
+        y += 25;
+        const cellW = 300;
+        const cellH = 225;
+        const gap = 20;
+        const imgs = await Promise.all(urls.map((url) => loadImage(url)));
+        imgs.filter(Boolean).forEach((img, index) => {
+          const col = index % 3;
+          if (index > 0 && col === 0) y += cellH + gap;
+          const scale = Math.min(cellW / img.width, cellH / img.height);
+          context.drawImage(img, 88 + col * (cellW + gap), y, img.width * scale, img.height * scale);
+        });
+        if (imgs.some(Boolean)) y += cellH + gap;
+      };
+
+      const openImages = splitImages(item.image).filter(isViewableImageUrl);
+      const doneImages = splitImages(item.completedImage).filter(isViewableImageUrl);
+      if (openImages.length || doneImages.length) {
         y += 20;
-        if (item.image) {
-          context.fillStyle = '#778196';
-          context.font = '17px Arial, sans-serif';
-          context.fillText('รูปภาพที่แจ้ง', 88, y);
-          y += 25;
-          try {
-            const img = await loadImage(item.image);
-            if (img) {
-              const imgWidth = 300;
-              const imgHeight = (img.height / img.width) * imgWidth;
-              context.drawImage(img, 88, y, imgWidth, imgHeight);
-              y += imgHeight + 20;
-            }
-          } catch (e) {
-            console.error('Error loading image:', e);
-          }
-        }
-        if (item.completedImage) {
-          context.fillStyle = '#778196';
-          context.font = '17px Arial, sans-serif';
-          context.fillText('รูปภาพที่ดำเนินการเสร็จแล้ว', 88, y);
-          y += 25;
-          try {
-            const img = await loadImage(item.completedImage);
-            if (img) {
-              const imgWidth = 300;
-              const imgHeight = (img.height / img.width) * imgWidth;
-              context.drawImage(img, 88, y, imgWidth, imgHeight);
-              y += imgHeight + 20;
-            }
-          } catch (e) {
-            console.error('Error loading image:', e);
-          }
-        }
+        await drawImageGroup('รูปภาพที่แจ้ง', openImages);
+        await drawImageGroup('รูปภาพที่ดำเนินการเสร็จแล้ว', doneImages);
       }
 
       pdf.addImage(canvas.toDataURL('image/jpeg', 0.94), 'JPEG', 0, 0, pageWidth, pageHeight);
@@ -1448,17 +1438,36 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
   );
 }
 
+// เก็บได้หลายรูปต่อช่อง (เลือกหลายไฟล์พร้อมกัน / วางทีละรูป / กด × ลบทีละรูป)
+// ค่าในฟอร์มคือ URL หลายอันคั่นด้วยขึ้นบรรทัดใหม่ (ดู splitImages/joinImages)
 export function FileField({ name, label, value, onChange }) {
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const isUploading = uploadingCount > 0;
+  // ใช้ ref ถือค่าล่าสุด กันอัพโหลดหลายรูปพร้อมกันแล้วรูปหลังเขียนทับรูปแรก
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+  const images = splitImages(value);
 
-  const handleFile = (event) => uploadFile(event.target.files?.[0]);
+  const setImages = (list) => {
+    const next = joinImages(list);
+    valueRef.current = next;
+    onChange({ target: { name, value: next } });
+  };
+
+  const handleFile = (event) => {
+    uploadFiles(Array.from(event.target.files || []));
+    event.target.value = '';
+  };
 
   // วางรูปที่ก๊อปมา (Ctrl+V) เช่นรูปจาก LINE หรือภาพแคปหน้าจอ ไม่ต้องบันทึกเป็นไฟล์ก่อน
   const handlePaste = (event) => {
-    const item = Array.from(event.clipboardData?.items || []).find((entry) => entry.type.startsWith('image/'));
-    if (!item) return;
+    const files = Array.from(event.clipboardData?.items || [])
+      .filter((entry) => entry.type.startsWith('image/'))
+      .map((entry) => entry.getAsFile())
+      .filter(Boolean);
+    if (!files.length) return;
     event.preventDefault();
-    uploadFile(item.getAsFile());
+    uploadFiles(files);
   };
 
   const pasteFromClipboard = async (event) => {
@@ -1466,13 +1475,17 @@ export function FileField({ name, label, value, onChange }) {
     if (isUploading) return;
     try {
       const items = await navigator.clipboard.read();
+      const files = [];
       for (const item of items) {
         const type = item.types.find((entry) => entry.startsWith('image/'));
         if (type) {
           const blob = await item.getType(type);
-          uploadFile(new File([blob], `pasted.${type.split('/')[1] || 'png'}`, { type }));
-          return;
+          files.push(new File([blob], `pasted.${type.split('/')[1] || 'png'}`, { type }));
         }
+      }
+      if (files.length) {
+        uploadFiles(files);
+        return;
       }
       await Swal.fire({ icon: 'info', title: 'ไม่มีรูปในคลิปบอร์ด', text: 'ก๊อปรูปก่อน (คลิกขวาที่รูป > คัดลอก) แล้วค่อยกดวาง', confirmButtonText: 'ตกลง', confirmButtonColor: '#5b5ce2' });
     } catch {
@@ -1480,118 +1493,97 @@ export function FileField({ name, label, value, onChange }) {
     }
   };
 
-  const uploadFile = async (file) => {
-    if (!file) return;
+  const readBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = () => reject(new Error('อ่านไฟล์ไม่สำเร็จ'));
+    reader.readAsDataURL(file);
+  });
 
-    if (!file.type.startsWith('image/')) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'ไฟล์ไม่ถูกต้อง',
-        text: 'กรุณาเลือกไฟล์รูปภาพเท่านั้น',
-        confirmButtonText: 'ตกลง',
-        confirmButtonColor: '#ef765e',
-      });
-      return;
+  const uploadOne = async (file) => {
+    const base64 = await readBase64(file);
+    const response = await fetch(`${API_BASE_URL}/api/upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file: base64, fileName: `${Date.now()}-${file.name}`, bucket: 'service-desk-images' }),
+    });
+    if (!response.ok) throw new Error('Upload failed');
+    const { url } = await response.json();
+    return url;
+  };
+
+  const uploadFiles = async (files) => {
+    const valid = files.filter((file) => file && file.type.startsWith('image/') && file.size <= 10 * 1024 * 1024);
+    const skipped = files.length - valid.length;
+    if (skipped) {
+      await Swal.fire({ icon: 'warning', title: 'ข้ามบางไฟล์', text: `${skipped} ไฟล์ไม่ใช่รูปภาพหรือใหญ่เกิน 10 MB`, confirmButtonText: 'ตกลง', confirmButtonColor: '#ef765e' });
     }
+    if (!valid.length) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'ไฟล์มีขนาดใหญ่เกินไป',
-        text: 'กรุณาเลือกไฟล์ภาพขนาดไม่เกิน 10 MB',
-        confirmButtonText: 'ตกลง',
-        confirmButtonColor: '#ef765e',
-      });
-      return;
+    setUploadingCount((n) => n + valid.length);
+    let failed = 0;
+    // อัพทีละรูปตามลำดับที่เลือก ได้ URL แล้วต่อท้ายรายการทันที
+    for (const file of valid) {
+      try {
+        const url = await uploadOne(file);
+        setImages([...splitImages(valueRef.current), url]);
+      } catch {
+        failed += 1;
+      } finally {
+        setUploadingCount((n) => n - 1);
+      }
     }
-
-    setIsUploading(true);
-    try {
-      const timestamp = Date.now();
-      const fileName = `${timestamp}-${file.name}`;
-      const reader = new FileReader();
-
-      reader.onload = async () => {
-        try {
-          const base64 = reader.result.split(',')[1];
-          const uploadResponse = await fetch(`${API_BASE_URL}/api/upload`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              file: base64,
-              fileName,
-              bucket: 'service-desk-images',
-            }),
-          });
-
-          if (!uploadResponse.ok) {
-            throw new Error('Upload failed');
-          }
-
-          const { url } = await uploadResponse.json();
-          onChange({ target: { name, value: url } });
-
-          await Swal.fire({
-            icon: 'success',
-            title: 'อัพโหลดสำเร็จ',
-            text: 'รูปภาพถูกอัพโหลดเสร็จแล้ว',
-            confirmButtonText: 'ตกลง',
-            confirmButtonColor: '#5b5ce2',
-            timer: 1500,
-            timerProgressBar: true,
-          });
-        } catch (uploadError) {
-          await Swal.fire({
-            icon: 'error',
-            title: 'อัพโหลดไม่สำเร็จ',
-            text: uploadError instanceof Error ? uploadError.message : 'ไม่สามารถอัพโหลดรูปภาพได้',
-            confirmButtonText: 'ปิด',
-            confirmButtonColor: '#ef765e',
-          });
-        } finally {
-          setIsUploading(false);
-        }
-      };
-
-      reader.readAsDataURL(file);
-    } catch (error) {
-      await Swal.fire({
-        icon: 'error',
-        title: 'เกิดข้อผิดพลาด',
-        text: error instanceof Error ? error.message : 'ไม่สามารถประมวลผลไฟล์ได้',
-        confirmButtonText: 'ปิด',
-        confirmButtonColor: '#ef765e',
-      });
-      setIsUploading(false);
+    if (failed) {
+      await Swal.fire({ icon: 'error', title: 'อัพโหลดไม่สำเร็จบางรูป', text: `อัพโหลดไม่สำเร็จ ${failed} รูป ลองใหม่อีกครั้ง`, confirmButtonText: 'ปิด', confirmButtonColor: '#ef765e' });
     }
   };
 
+  const removeAt = (index) => setImages(images.filter((_, i) => i !== index));
+
   return (
-    <label className="file-field">
-      {label}
+    <div className="file-field">
+      <span style={{ display: 'block' }}>{label}{images.length > 0 && ` (${images.length} รูป)`}</span>
       <input
         name={name}
         type="file"
         accept="image/*"
+        multiple
         onChange={handleFile}
         disabled={isUploading}
       />
-      <span>{isUploading ? '⟳' : '▣'}</span>
       <div
         className="paste-zone"
         tabIndex={0}
         onPaste={handlePaste}
         onClick={(event) => { event.preventDefault(); event.currentTarget.focus(); }}
       >
-        <span>{isUploading ? 'กำลังอัพโหลด...' : '📋 วางรูปตรงนี้: คลิกกรอบนี้แล้วกด Ctrl+V'}</span>
+        <span>{isUploading ? `กำลังอัพโหลด... (เหลือ ${uploadingCount} รูป)` : '📋 วางรูปตรงนี้: คลิกกรอบนี้แล้วกด Ctrl+V (เพิ่มได้หลายรูป)'}</span>
         <button type="button" className="secondary-btn" onClick={pasteFromClipboard} disabled={isUploading}>วางรูป</button>
       </div>
-      {value && (isViewableImageUrl(value) ? (
-        <img className="image-preview" src={value} alt="ตัวอย่างรูปภาพ" />
-      ) : (
-        <em className="image-unavailable">ไม่มีไฟล์รูปภาพ (ข้อมูลนำเข้าเก่า หารูปต้นฉบับไม่พบ)</em>
-      ))}
-    </label>
+      {images.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '8px' }}>
+          {images.map((url, index) => (
+            <div key={url} style={{ position: 'relative' }}>
+              {isViewableImageUrl(url) ? (
+                <a href={url} target="_blank" rel="noreferrer">
+                  <img className="image-preview" src={url} alt={`รูปที่ ${index + 1}`} style={{ height: '110px', maxHeight: 'none', objectFit: 'cover', marginTop: 0 }} />
+                </a>
+              ) : (
+                <em className="image-unavailable">ไม่มีไฟล์รูปภาพ (ข้อมูลนำเข้าเก่า)</em>
+              )}
+              <button
+                type="button"
+                onClick={() => removeAt(index)}
+                title="เอารูปนี้ออก"
+                style={{ position: 'absolute', top: '4px', right: '4px', width: '24px', height: '24px', borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.65)', color: '#fff', cursor: 'pointer', lineHeight: '24px', padding: 0, fontSize: '15px' }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

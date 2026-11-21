@@ -235,6 +235,14 @@ const OPERATOR_LABELS = {
   'เวลา': 'time',
   'รายละเอียดงาน': 'action',
   'ทะเบียนรถ': 'vehicle',
+  // รายงานแบบภาษาอังกฤษ (Manpower / Project / Date / Time / Details)
+  'manpower': 'assignee',
+  'project': 'jobName',
+  'location': 'place',
+  'date': 'date',
+  'time': 'time',
+  'details': 'action',
+  'detail': 'action',
 };
 // วันจบ = วันที่ตัวหลัง + เวลาตัวหลัง ถ้าเวลาจบน้อยกว่าเวลาเริ่มในวันเดียวกัน (งานกลางคืน 22:00 - 05:00) = เช้าวันถัดไป
 const operatorCompletedAt = (date, time) => {
@@ -250,10 +258,19 @@ const operatorCompletedAt = (date, time) => {
 };
 const parseOperatorReport = (lines) => {
   const f = {};
+  let inAction = false;
   for (const line of lines) {
-    const match = line.match(/^([^:：]+?)\s*[:：]\s*(.*)$/);
-    const key = match && OPERATOR_LABELS[match[1].trim()];
-    if (key && match[2].trim() && !f[key]) f[key] = match[2].trim();
+    // บรรทัดที่เป็น "หัวข้อ : ค่า" (หัวข้อสั้นๆ ไม่ใช่ประโยค)
+    const match = line.match(/^([^:：]{1,25}?)\s*[:：]\s*(.*)$/);
+    const key = match && OPERATOR_LABELS[match[1].trim().toLowerCase()];
+    if (key) {
+      inAction = key === 'action';
+      if (match[2].trim() && !f[key]) f[key] = match[2].trim();
+      continue;
+    }
+    if (match) { inAction = false; continue; } // หัวข้ออื่น เช่น "สถานะ :", "Project Co. :"
+    // บรรทัดอิสระที่ตามหลัง Details/รายละเอียดงาน = รายละเอียดต่อ (ข้าม @mention)
+    if (inAction && !line.startsWith('@')) f.action = [f.action, line].filter(Boolean).join('\n');
   }
   if (!f.assignee || !f.jobName || !f.action) return null;
   return {
@@ -523,16 +540,21 @@ const closeRequestFromFields = async (fields, groupKey, rawText) => {
 };
 
 // รูปที่พักไว้กับ "แจ้งปิดงาน" ที่รอเลือกงาน: เลือกงานแล้วค่อยใส่ (1 รูป = ใส่เลย, หลายรูป = ไปคิวเลือกรูป)
-export const attachImagesToRequest = async (request, field, images, sourceGroupId) => {
-  if (images.length === 1) {
-    const { error } = await supabase.from('requests').update({ [field]: images[0].url }).eq('id', request.id);
-    if (error) throw error;
-  } else if (images.length > 1) {
-    const { error } = await supabase
-      .from('line_pending_images')
-      .insert({ request_id: request.id, ticket: request.ticket, field, images, source_group_id: sourceGroupId });
-    if (error) throw error;
-  }
+// งานหนึ่งเก็บได้หลายรูป: ช่อง image / completedImage เก็บ URL หลายอันคั่นด้วยขึ้นบรรทัดใหม่
+export const splitImages = (value) => String(value || '').split(/\s*\n\s*/).map((v) => v.trim()).filter(Boolean);
+// ต่อรูปใหม่ท้ายรูปที่งานมีอยู่แล้ว (ไม่ทับรูปเดิม)
+const appendImages = async (requestId, field, urls) => {
+  if (!urls.length) return;
+  const { data: current, error: readError } = await supabase.from('requests').select(field).eq('id', requestId).maybeSingle();
+  if (readError) throw readError;
+  const merged = Array.from(new Set([...splitImages(current?.[field]), ...urls])).join('\n');
+  const { error } = await supabase.from('requests').update({ [field]: merged }).eq('id', requestId);
+  if (error) throw error;
+};
+
+// sourceGroupId ไม่ใช้แล้ว (เดิมใช้ส่งรูปหลายรูปไปคิวเลือกรูป) เก็บไว้ให้ที่เรียกเดิมยังใช้ได้
+export const attachImagesToRequest = async (request, field, images, _sourceGroupId) => {
+  await appendImages(request.id, field, images.map((img) => img.url));
   broadcastRequestsChanged();
 };
 
@@ -638,8 +660,7 @@ const handleTextMessage = async (groupKey, text) => {
 };
 
 // รูปที่ส่งตามมาหลัง "แจ้งเปิดงาน" (-> รูปที่แจ้ง) หรือ "แจ้งปิดงาน" (-> รูปงานเสร็จ):
-// รูปแรกใส่ให้งานเลย ถ้ามีรูปที่ 2 ขึ้นไป ไม่เดาเอง ถอดรูปออกแล้วย้ายทุกรูปไปพักใน
-// line_pending_images ให้คนเลือกในหน้าเว็บ
+// ทุกรูปต่อท้ายรูปของงานนั้น (เก็บได้หลายรูป)
 const handleImageMessage = async (groupKey, messageId, accessToken, requestOrigin) => {
   const active = activeByGroup.get(groupKey);
   if (!active || Date.now() > active.expiresAt) {
@@ -660,23 +681,8 @@ const handleImageMessage = async (groupKey, messageId, accessToken, requestOrigi
     return;
   }
 
-  if (active.images.length === 1) {
-    const { error } = await supabase.from('requests').update({ [active.field]: url }).eq('id', active.requestId);
-    if (error) throw error;
-  } else if (!active.pendingId) {
-    const { error: clearError } = await supabase.from('requests').update({ [active.field]: null }).eq('id', active.requestId);
-    if (clearError) throw clearError;
-    const { data, error } = await supabase
-      .from('line_pending_images')
-      .insert({ request_id: active.requestId, ticket: active.ticket, field: active.field, images: active.images, source_group_id: groupKey })
-      .select('id')
-      .single();
-    if (error) throw error;
-    active.pendingId = data.id;
-  } else {
-    const { error } = await supabase.from('line_pending_images').update({ images: active.images }).eq('id', active.pendingId);
-    if (error) throw error;
-  }
+  // ทุกรูปที่ส่งตามมาใส่ให้งานทั้งหมด (งานหนึ่งเก็บได้หลายรูป ไม่ต้องไปเลือกรูปในเว็บแล้ว)
+  await appendImages(active.requestId, active.field, [url]);
   broadcastRequestsChanged();
   recordHit({ attachedImage: active.ticket, imageCount: active.images.length });
 };

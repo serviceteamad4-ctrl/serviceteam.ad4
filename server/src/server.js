@@ -4,7 +4,7 @@ import cors from 'cors';
 import { supabase } from './supabase.js';
 import { storeImage, removeImage, UPLOAD_DIR } from './storage.js';
 import { runMigrations } from './migrate.js';
-import { lineRouter } from './line.js';
+import { lineRouter, splitImages } from './line.js';
 import { addEventsClient, broadcastRequestsChanged } from './events.js';
 
 const app = express();
@@ -284,11 +284,9 @@ app.delete('/api/requests/:id', async (req, res) => {
 
     if (fetchError) throw fetchError;
 
-    if (existing?.image) {
-      await removeImage('service-desk-images', existing.image);
-    }
-    if (existing?.completedImage) {
-      await removeImage('service-desk-images', existing.completedImage);
+    // แต่ละช่องอาจมีหลายรูป (URL คั่นด้วยขึ้นบรรทัดใหม่) ลบทุกรูป
+    for (const url of [...splitImages(existing?.image), ...splitImages(existing?.completedImage)]) {
+      await removeImage('service-desk-images', url).catch(() => {});
     }
 
     const { error } = await supabase

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { formatDate, isViewableImageUrl } from './requestUtils.js';
+import { formatDate, isViewableImageUrl, splitImages } from './requestUtils.js';
 
 // จัดกลุ่มฟิลด์เป็นหมวดหมู่ให้อ่านง่ายขึ้น แทนการแสดงเรียงยาวทีละรายการ
 const sections = [
@@ -86,10 +86,14 @@ export default function RequestDetail({ request, onBack, onEdit, onDelete, embed
                   return (
                     <div className={`detail-field ${WIDE_KEYS.includes(key) ? 'detail-wide' : ''}`} key={key}>
                       <span>{label}</span>
-                      {isImageValue(key, value) && isViewableImageUrl(value) ? (
-                        <button type="button" className="image-zoom-trigger" onClick={() => setLightboxImage(value)}>
-                          <img src={value} alt={label} />
-                        </button>
+                      {isImageValue(key, value) && splitImages(value).some(isViewableImageUrl) ? (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                          {splitImages(value).filter(isViewableImageUrl).map((url) => (
+                            <button key={url} type="button" className="image-zoom-trigger" onClick={() => setLightboxImage(url)}>
+                              <img src={url} alt={label} />
+                            </button>
+                          ))}
+                        </div>
                       ) : isMissingImageValue(key, value) ? (
                         <em className="image-unavailable">ไม่มีไฟล์รูปภาพ (ข้อมูลนำเข้าเก่า หารูปต้นฉบับไม่พบ)</em>
                       ) : (

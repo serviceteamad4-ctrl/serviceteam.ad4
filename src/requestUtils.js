@@ -6,3 +6,8 @@ export const formatDate = (value) => value ? new Intl.DateTimeFormat('th-TH-u-ca
 // ไม่ใช่ URL รูปจริง (ไฟล์ต้นฉบับหาไม่พบแล้ว) จึงต้องแยกไว้ ไม่ให้ขึ้น <img> ที่โหลดไม่ได้
 export const isViewableImageUrl = (value) => typeof value === 'string'
   && /^(https?:\/\/|data:image\/|\/)/i.test(value.trim());
+
+// งานหนึ่งเก็บได้หลายรูป: ช่อง image / completedImage เก็บ URL หลายอันคั่นด้วยขึ้นบรรทัดใหม่
+// (ข้อมูลเก่าที่มีรูปเดียวก็ยังอ่านได้เหมือนเดิม)
+export const splitImages = (value) => String(value || '').split(/\s*\n\s*/).map((v) => v.trim()).filter(Boolean);
+export const joinImages = (list) => Array.from(new Set(list.filter(Boolean))).join('\n');
