@@ -466,11 +466,11 @@ function App() {
     };
   }, []);
 
-  const handleChooseLineClose = async (pendingId, requestId) => {
+  const handleChooseLineClose = async (pendingId, requestId, jobType) => {
     await fetch(`${API_BASE_URL}/api/line/pending-closes/${pendingId}/choose`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requestId }),
+      body: JSON.stringify({ requestId, jobType }),
     });
     setLinePendingCloses((prev) => prev.filter((item) => item.id !== pendingId));
     if (linePendingCloseRequestId) setLinePendingClosesOpen(false);
@@ -480,11 +480,11 @@ function App() {
   };
 
   // ระบบเดางานผิด/หาไม่เจอ: พิมพ์เลขงานเอง คืนข้อความ error ถ้าปิดไม่สำเร็จ (ให้หน้าต่างแสดง)
-  const handleChooseLineCloseByTicket = async (pendingId, ticket) => {
+  const handleChooseLineCloseByTicket = async (pendingId, ticket, jobType) => {
     const response = await fetch(`${API_BASE_URL}/api/line/pending-closes/${pendingId}/choose`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ticket }),
+      body: JSON.stringify({ ticket, jobType }),
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -1369,7 +1369,7 @@ function RequestEditor({ request, requests = [], onClose, onSave, onDelete }) {
               name="jobType"
               label="ลักษณะงาน"
               value={form.jobType || ''}
-              options={dropdownData.jobType || ['แนะนำ', 'แก้ไขหน้างาน', 'รีโมท', 'ประเมินราคา', 'เทรน']}
+              options={dropdownData.jobType || ['แนะนำ', 'แก้ไขหน้างาน', 'รีโมท', 'แก้ไขสื่อ', 'ขึ้นสื่อ', 'ประเมินราคา', 'เทรน']}
               onChange={update}
               onAddOption={(value) => {
                 handleAddDropdownValue('jobType', value);

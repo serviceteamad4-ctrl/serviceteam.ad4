@@ -429,6 +429,18 @@ export const guessEquipment = (text) => {
   return 'จอ LED';
 };
 
+// ลักษณะงานตอนปิดงาน: เดาจากการดำเนินการ เข้าได้หมวดเดียว = ใช้เลย, ไม่เข้าหมวดไหน/เข้าหลายหมวด = ไม่แน่ใจ (null) ให้คนเลือกในเว็บ
+export const CLOSE_JOB_TYPES = ['รีโมท', 'แก้ไขสื่อ', 'ขึ้นสื่อ', 'แก้ไขหน้างาน'];
+export const guessJobType = (text, fields = {}) => {
+  const t = String(text || '').toLowerCase();
+  const hits = [];
+  if (/รีโมท|remote|anydesk|teamviewer|ultraviewer|ทางไกล|แนะนำ/.test(t)) hits.push('รีโมท');
+  if (/(แก้(ไข)?|อัพ|อัป|เปลี่ยน|อัพเดท|อัปเดต)\s*(ไฟล์)?\s*สื่อ|playlist|เพลย์ลิสต์|autorun|ออโต้รัน/.test(t)) hits.push('แก้ไขสื่อ');
+  if (/(ขึ้น|ลง|ส่ง|ใส่)\s*(ไฟล์)?\s*สื่อ|ขึ้น(โฆษณา|แคมเปญ|campaign)|content|คอนเทนต์/.test(t)) hits.push('ขึ้นสื่อ');
+  if (fields.vehicle || /หน้างาน|เข้า(ตรวจ|ไปตรวจ|ไปซ่อม|ไปเปลี่ยน|ซ่อม|เปลี่ยน|แก้|หน้างาน)|ลงพื้นที่|on\s*site|ซ่อม|เปลี่ยน\s*(แผ่น|โมดูล|module|power|psu|พาวเวอร์|การ์ด|card|สาย)|นั่งร้าน|ช่าง/.test(t)) hits.push('แก้ไขหน้างาน');
+  return hits.length === 1 ? hits[0] : null;
+};
+
 export const applyClose = async (requestId, fields, completedAt) => {
   const updates = { status: 'เรียบร้อยปกติ', completedAt };
   if (fields.equipment) {
@@ -512,6 +524,15 @@ const closeRequestFromFields = async (fields, groupKey, rawText) => {
     const combined = [fields.detail, ...(fields.extra || [])].filter(Boolean).join('\n');
     if (combined) fields.action = combined;
   }
+  // ลักษณะงาน: เขียนมาเองใช้ตามนั้น ไม่งั้นเดาจากการดำเนินการ เดาไม่ได้ = ส่งให้คนเลือกในเว็บก่อนปิด
+  // ปิดงานแล้วไม่มีลักษณะงาน "แนะนำ" (ค่าตั้งต้นตอนเปิดงาน): เขียน "แนะนำ" มา = รีโมท
+  if (/^แนะนำ/.test(String(fields.jobType || "").trim())) fields.jobType = "รีโมท";
+  if (!CLOSE_JOB_TYPES.includes(fields.jobType)) fields.jobType = guessJobType(fields.action, fields) || undefined;
+  const closeOrAsk = async (request) => {
+    if (!fields.jobType) return queuePendingClose([request], fields, completedAt, groupKey, { needJobType: true });
+    await applyClose(request.id, fields, completedAt);
+    return { request };
+  };
 
   // ระบุเลขงานมา = ปิดงานนั้นตรงๆ ไม่ต้องเทียบลูกค้า/สถานที่
   if (fields.ticket) {
@@ -520,17 +541,13 @@ const closeRequestFromFields = async (fields, groupKey, rawText) => {
       recordHit({ closeSkipped: reason, ticket: fields.ticket });
       return null;
     }
-    await applyClose(request.id, fields, completedAt);
-    return { request };
+    return closeOrAsk(request);
   }
 
   // ลูกค้า (+สถานที่) ตรงกันเป๊ะ: งานเดียวปิดเลย หลายงานให้เลือกในเว็บ (เหมือนเดิม)
   if (fields.customer) {
     const matches = await findOpenRequests(fields);
-    if (matches.length === 1) {
-      await applyClose(matches[0].id, fields, completedAt);
-      return { request: matches[0] };
-    }
+    if (matches.length === 1) return closeOrAsk(matches[0]);
     if (matches.length > 1) return queuePendingClose(matches, fields, completedAt, groupKey);
   }
 
@@ -876,7 +893,10 @@ lineRouter.post('/pending-closes/:id/choose', async (req, res) => {
       request = data;
     }
 
-    await applyClose(request.id, pending.fields, pending.completed_at);
+    const savedType = pending.fields?.jobType === 'แนะนำ' ? 'รีโมท' : pending.fields?.jobType;
+    const jobType = req.body?.jobType || (CLOSE_JOB_TYPES.includes(savedType) ? savedType : null);
+    if (!jobType) return res.status(400).json({ message: 'เลือกลักษณะงานก่อนปิดงาน' });
+    await applyClose(request.id, { ...pending.fields, jobType }, pending.completed_at);
     await attachImagesToRequest(request, 'completedImage', pending.images, pending.source_group_id);
 
     const { error: deleteError } = await supabase.from('line_pending_closes').delete().eq('id', pending.id);
