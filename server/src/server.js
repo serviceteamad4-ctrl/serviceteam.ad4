@@ -362,7 +362,7 @@ app.put('/api/supplier-tasks/:id', async (req, res) => {
 
 app.delete('/api/supplier-tasks/:id', async (req, res) => {
   const { data: existing } = await supabase.from('supplier_tasks').select('image, fixed_image').eq('id', req.params.id).maybeSingle();
-  for (const url of [existing?.image, existing?.fixed_image]) {
+  for (const url of [existing?.image, existing?.fixed_image].flatMap(splitImages)) {
     if (url) await removeImage('service-desk-images', url).catch(() => {});
   }
   const { error } = await supabase.from('supplier_tasks').delete().eq('id', req.params.id);

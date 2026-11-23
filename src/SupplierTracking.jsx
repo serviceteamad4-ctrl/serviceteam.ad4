@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
 import { FileField } from './App.jsx';
+import { splitImages } from './requestUtils.js';
 
 // งานติดตามซัพ: เก็บในตาราง supplier_tasks แยกจากงานแจ้งบริการโดยสิ้นเชิง
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
@@ -124,9 +125,13 @@ export default function SupplierTracking() {
               return (
                 <React.Fragment key={t.id}>
                   <div style={{ ...cell, padding: '4px 10px', display: 'flex', gap: '4px', alignItems: 'center' }}>
-                    {[t.image, t.fixed_image].filter(Boolean).map((url) => (
-                      <a key={url} href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-                        <img src={url} alt="" loading="lazy" style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: '6px', display: 'block' }} />
+                    {/* ช่องรูปเก็บได้หลาย URL (คั่นบรรทัด): แสดงรูปแรกของแต่ละช่อง + จำนวนที่เหลือ */}
+                    {[t.image, t.fixed_image].map((value) => splitImages(value)).filter((urls) => urls.length).map((urls) => (
+                      <a key={urls[0]} href={urls[0]} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ position: 'relative', display: 'block' }}>
+                        <img src={urls[0]} alt="" loading="lazy" style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: '6px', display: 'block' }} />
+                        {urls.length > 1 && (
+                          <span style={{ position: 'absolute', right: '-4px', bottom: '-4px', background: '#087f75', color: '#fff', fontSize: '10px', borderRadius: '999px', padding: '0 5px', lineHeight: '16px' }}>+{urls.length - 1}</span>
+                        )}
                       </a>
                     ))}
                     {!t.image && !t.fixed_image && <span onClick={edit}>-</span>}
