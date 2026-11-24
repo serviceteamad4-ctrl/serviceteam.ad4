@@ -287,6 +287,26 @@ const parseOperatorReport = (lines) => {
   };
 };
 
+// "อัพเดตปิดงาน" (อาจมี @mention นำหน้า) แล้วตามด้วยหัวเรื่องเคส + สาเหตุ/วิธีแก้ไข แบบไม่มีหัวข้อ : เช่น
+//   @เปรม / อัพเดตปิดงาน / 1757774 จอ True Branding Shop Happitat TV - สื่อไม่อับเดต / สาเหตุ... / วิธีแก้ไข ...
+// บรรทัดแรกหลังหัว = ชื่องาน (ใช้หางานที่ใกล้เคียง ให้คนยืนยันในเว็บ), ที่เหลือ = การดำเนินการ
+const UPDATE_CLOSE_HEADER = /^(อ[ัะ]?[พป]เด[ทต]\s*)?ปิดงาน\s*$/;
+const parseUpdateClose = (lines) => {
+  const body = lines.filter((line) => !line.startsWith('@'));
+  if (body.length < 3 || !UPDATE_CLOSE_HEADER.test(body[0])) return null;
+  const [, subject, ...rest] = body;
+  const fix = rest.find((line) => NO_COLON_FIX.test(line) || FIX_LABEL.test(line.split(/[:：]/)[0].trim()));
+  if (!fix) return null;
+  return {
+    kind: 'close',
+    fields: {
+      // ไม่ใส่ customer: ไม่มีสถานที่ชัดเจน ถ้าเทียบลูกค้าตรงๆ อาจปิดงาน True งานอื่นผิดตัว
+      jobName: subject,
+      action: rest.join('\n'),
+    },
+  };
+};
+
 // คืนค่า { kind: 'open' | 'close', fields } หรือ null ถ้าไม่ใช่คำสั่ง
 export const parseLineMessage = (text) => {
   const lines = String(text || '').split('\n').map((line) => line.trim()).filter(Boolean);
@@ -296,7 +316,7 @@ export const parseLineMessage = (text) => {
   if (lines[0].startsWith(TRIGGER_WORD)) kind = 'open';
   else if (lines[0].startsWith(CLOSE_TRIGGER_WORD)) kind = 'close';
   else if (lines[0].startsWith(MOVE_TRIGGER_WORD)) return { kind: 'move', fields: parseMoveMessage(lines) };
-  if (!kind) return parseTrueCase(lines) || parseOperatorReport(lines);
+  if (!kind) return parseUpdateClose(lines) || parseTrueCase(lines) || parseOperatorReport(lines);
 
   const fields = {};
   for (const line of lines.slice(1)) {
