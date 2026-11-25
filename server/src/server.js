@@ -6,6 +6,7 @@ import { storeImage, removeImage, UPLOAD_DIR } from './storage.js';
 import { runMigrations } from './migrate.js';
 import { lineRouter, splitImages } from './line.js';
 import { addEventsClient, broadcastRequestsChanged } from './events.js';
+import { triggerBmnSync } from './bmnSheetsSync.js';
 
 const app = express();
 // Render (และ reverse proxy อื่นๆ) เชื่อม TLS เข้ามาแล้วส่งต่อเป็น http ภายใน
@@ -210,6 +211,7 @@ app.post('/api/requests', async (req, res) => {
     if (error) throw error;
 
     broadcastRequestsChanged();
+    triggerBmnSync(data);
     res.status(201).json(data);
   } catch (error) {
     res.status(500).json({ message: 'Failed to create request', error: String(error) });
@@ -268,6 +270,7 @@ app.put('/api/requests/:id', async (req, res) => {
     if (error) throw error;
 
     broadcastRequestsChanged();
+    triggerBmnSync(data);
     res.json(data);
   } catch (error) {
     res.status(500).json({ message: 'Failed to update request', error: String(error) });

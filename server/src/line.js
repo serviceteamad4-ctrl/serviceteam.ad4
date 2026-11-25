@@ -3,6 +3,7 @@ import express from 'express';
 import { supabase } from './supabase.js';
 import { storeImage, removeImage } from './storage.js';
 import { broadcastRequestsChanged } from './events.js';
+import { triggerBmnSync } from './bmnSheetsSync.js';
 
 // ข้อความ LINE ต้องขึ้นต้นด้วยคำเหล่านี้ ถึงจะถือว่าเป็นคำสั่ง
 // (กันไม่ให้ข้อความคุยเล่นทั่วไปในกลุ่มถูกตีความเป็นงานโดยไม่ตั้งใจ)
@@ -424,6 +425,7 @@ const createRequestFromFields = async (fields) => {
     .single();
   if (error) throw error;
   broadcastRequestsChanged();
+  triggerBmnSync(data);
   return data;
 };
 
@@ -475,9 +477,10 @@ export const applyClose = async (requestId, fields, completedAt) => {
   if (fields.action) updates.action = fields.action;
   if (fields.jobType) updates.jobType = fields.jobType;
   if (fields.vehicle) updates.vehicle = fields.vehicle;
-  const { error } = await supabase.from('requests').update(updates).eq('id', requestId);
+  const { data: updated, error } = await supabase.from('requests').update(updates).eq('id', requestId).select().single();
   if (error) throw error;
   broadcastRequestsChanged();
+  triggerBmnSync(updated);
 };
 
 // คืนค่า { request } = ปิดแล้ว, { pendingCloseId } = เจอหลายงาน พักให้เลือกในเว็บ, null = ปิดไม่ได้
@@ -643,9 +646,10 @@ const moveRequestFromFields = async (fields) => {
   // ย้ายไปเรียบร้อยปกติ: ใส่วันเวลาเสร็จให้ด้วย (ถ้ายังไม่มี) ไม่งั้นรายงานประจำวันนับไม่เจอ
   if (fields.status === 'เรียบร้อยปกติ' && !request.completedAt) updates.completedAt = new Date().toISOString();
 
-  const { error } = await supabase.from('requests').update(updates).eq('id', request.id);
+  const { data: updated, error } = await supabase.from('requests').update(updates).eq('id', request.id).select().single();
   if (error) throw error;
   broadcastRequestsChanged();
+  triggerBmnSync(updated);
   recordHit({ moved: request.ticket, from: request.status, to: fields.status });
   return request;
 };
