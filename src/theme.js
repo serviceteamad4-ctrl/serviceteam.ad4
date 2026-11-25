@@ -208,6 +208,17 @@ export const buildThemeCss = (theme) => {
   if (line) {
     rules.push(`body .filter-header, body .filter-field, body .filter-actions { border-color: ${line} !important; }`);
   }
+  // ป๊อปอัปฟอร์ม (เพิ่ม/แก้ไขงานซัพ): ทึบเสมอแม้ตั้งกล่องเนื้อหาโปร่งไว้ ไม่งั้นตารางด้านหลังโผล่ทะลุจนอ่านไม่ออก
+  // กล่องรูปข้างใน (เดิมพื้นขาวตายตัว) ให้เป็นพื้นจางตามสีป๊อปอัป ตัวหนังสือตัดกับพื้นเสมอ
+  if (theme.panelColor || panelOpacity < 1) {
+    const modalFill = theme.panelColor || THEME_FALLBACKS.panelColor;
+    const modalText = theme.textColor || readableTextOn(modalFill);
+    const dark = readableTextOn(modalFill) === '#ffffff';
+    const soft = dark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.03)';
+    rules.push(`body .modal-card { background: ${toCssFill(modalFill)} !important; --ink: ${modalText}; color: ${modalText} !important; color-scheme: ${dark ? 'dark' : 'light'}; }`);
+    rules.push(`body .modal-card .file-field, body .modal-card .paste-zone, body .modal-card .file-field input[type=file] { background: ${soft} !important; color: ${modalText} !important; border-color: ${line || '#dfe7e5'} !important; }`);
+    rules.push(`body .modal-card .modal-input { background: ${soft} !important; }`);
+  }
   if (theme.inputColor) {
     rules.push(`body .filter-input { background: ${toCssFill(theme.inputColor)} !important; color: ${readableTextOn(theme.inputColor)} !important; border-color: ${line || '#ddd'} !important; }`);
     if (readableTextOn(theme.inputColor) === '#ffffff') rules.push('body .filter-input { color-scheme: dark; }');

@@ -176,8 +176,9 @@ function TaskForm({ task, suppliers, onClose, onSave, onDelete }) {
   const [form, setForm] = useState(task);
   const [saving, setSaving] = useState(false);
   const set = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
-  const field = { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px' };
-  const input = { padding: '8px 10px', borderRadius: '10px', border: '1px solid var(--line-color, #ccc)', font: 'inherit', background: 'transparent', color: 'inherit' };
+  // ป้ายช่องตัวหนา + ช่องกรอกมีพื้นจางและขอบชัด ให้แยกออกจากพื้นป๊อปอัป (สีพื้นมืด/สว่างตามธีม ตั้งใน theme.js)
+  const field = { display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '14px', fontWeight: 600 };
+  const input = { padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--line-color, #cfd8d6)', font: 'inherit', fontWeight: 400, background: '#fff', color: 'inherit' };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -187,35 +188,36 @@ function TaskForm({ task, suppliers, onClose, onSave, onDelete }) {
   };
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', zIndex: 50 }}>
-      <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="detail-card" style={{ width: 'min(560px, 100%)', maxHeight: '90vh', overflowY: 'auto', background: '#fff', borderRadius: '18px', padding: '20px', display: 'grid', gap: '12px', color: 'var(--ink)' }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', zIndex: 50 }}>
+      {/* ไม่ใช้ detail-card: คลาสนั้นโดนธีมทำให้โปร่ง ตารางด้านหลังจะโผล่ทะลุ */}
+      <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="modal-card" style={{ width: 'min(560px, 100%)', maxHeight: '90vh', overflowY: 'auto', background: '#fff', border: '1px solid var(--line-color, #e4e9e8)', boxShadow: '0 24px 60px rgba(0,0,0,0.45)', borderRadius: '18px', padding: '22px', display: 'grid', gap: '14px', color: 'var(--ink)' }}>
         <h3 style={{ margin: 0 }}>{task.id ? 'แก้ไขงานซัพ' : 'เพิ่มงานซัพ'}</h3>
         <label style={field}>ซัพพลายเออร์ *
-          <input name="supplier" list="supplier-names" value={form.supplier} onChange={set} required style={input} />
+          <input name="supplier" list="supplier-names" value={form.supplier} onChange={set} required className="modal-input" style={input} />
           <datalist id="supplier-names">{suppliers.map((s) => <option key={s} value={s} />)}</datalist>
         </label>
         <label style={field}>แจ้งเรื่องอะไร
-          <textarea name="topic" rows={3} value={form.topic || ''} onChange={set} style={input} />
+          <textarea name="topic" rows={3} value={form.topic || ''} onChange={set} className="modal-input" style={input} />
         </label>
         <ImageSlot name="image" label="รูปตอนแจ้ง" value={form.image} onChange={set} />
         <label style={field}>สาขา/สถานที่
-          <input name="location" value={form.location || ''} onChange={set} style={input} />
+          <input name="location" value={form.location || ''} onChange={set} className="modal-input" style={input} />
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <label style={field}>แจ้งเมื่อ
-            <input type="datetime-local" name="notified_at" value={form.notified_at || ''} onChange={set} style={input} />
+            <input type="datetime-local" name="notified_at" value={form.notified_at || ''} onChange={set} className="modal-input" style={input} />
           </label>
           <label style={field}>สถานะ
-            <select name="status" value={form.status} onChange={set} style={input}>
+            <select name="status" value={form.status} onChange={set} className="modal-input" style={input}>
               {STATUSES.map((s) => <option key={s}>{s}</option>)}
             </select>
           </label>
         </div>
         <label style={field}>ติดตามล่าสุดเมื่อ
-          <input type="datetime-local" name="follow_up_at" value={form.follow_up_at || ''} onChange={set} style={input} />
+          <input type="datetime-local" name="follow_up_at" value={form.follow_up_at || ''} onChange={set} className="modal-input" style={input} />
         </label>
         <label style={field}>ผลการติดตาม / ซัพตอบว่าอะไร
-          <textarea name="note" rows={3} value={form.note || ''} onChange={set} style={input} />
+          <textarea name="note" rows={3} value={form.note || ''} onChange={set} className="modal-input" style={input} />
         </label>
         <ImageSlot name="fixed_image" label="รูปหลังซัพแก้แล้ว" value={form.fixed_image} onChange={set} />
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
